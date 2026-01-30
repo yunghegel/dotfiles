@@ -1,0 +1,7 @@
+write_file() {
+    local file="$1"
+    local content="$2"
+
+    
+    echo "$content" > "$file"
+}

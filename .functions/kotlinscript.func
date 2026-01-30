@@ -1,0 +1,221 @@
+# Usage: mk-kts <script-name>
+# Usage: mk-kts <script-name>
+function mk-kts() {
+    if [[ -z "$SCRIPTS_DIR" ]]; then
+      echo "Error: SCRIPTS_DIR is not set." >&2
+      return 1
+    fi
+
+    # 1. Define Paths relative to the centralized kts folder
+    local project_root="$SCRIPTS_DIR/kts"
+    local host_jar="$project_root/build/libs/host.jar"
+    local script_storage="$project_root/scripts"
+    local bin_dir="$SCRIPTS_DIR/bin"
+
+    # 2. Check for Host Environment
+    if [[ ! -f "$host_jar" ]]; then
+        echo "Error: Host JAR not found at $host_jar" >&2
+        echo "Have you run 'setup-kts-env' or built the project?" >&2
+        return 1
+    fi
+
+    if [[ -z "$1" ]]; then
+      echo "Usage: mk-kts <script-name>" >&2
+      return 1
+    fi
+
+    local base_name="${1%.kexe.kts}" 
+    base_name="${base_name%.kts}"    
+    
+    local file_name="${base_name}.kexe.kts"
+    local full_path="$script_storage/$file_name"
+    local bin_executable="$bin_dir/$base_name"
+
+    # 3. Create Directories if missing
+    mkdir -p "$script_storage"
+    mkdir -p "$bin_dir"
+
+    # 4. Check collisions
+    if [[ -e "$full_path" ]]; then
+      echo "Error: Script '$file_name' already exists in storage." >&2
+      return 1
+    fi
+    if [[ -e "$bin_executable" ]]; then
+      echo "Error: Executable '$base_name' already exists in bin." >&2
+      return 1
+    fi
+
+    # 5. Create Script Template
+    echo "Creating script: $full_path"
+    cat <<EOF > "$full_path"
+// Global imports defined in Host (java.io.File, Coroutines) are available automatically.
+// Dependencies defined in kts/build.gradle.kts are available automatically.
+
+println("Hello from $base_name")
+
+// Example: Using OkHttp (bundled in build.gradle.kts)
+/*
+import okhttp3.OkHttpClient
+import okhttp3.Request
+
+val client = OkHttpClient()
+val request = Request.Builder().url("https://httpbin.org/get").build()
+client.newCall(request).execute().use { response ->
+    println(response.body?.string())
+}
+*/
+EOF
+
+    # 6. Create Wrapper
+    # Points to the host.jar inside the kts/build/libs folder
+    echo "Creating wrapper: $bin_executable"
+    cat <<WRAPPER > "$bin_executable"
+#!/bin/bash
+exec java -jar "$host_jar" "$full_path" "\$@"
+WRAPPER
+
+    chmod +x "$bin_executable"
+    echo "✅ Done. Run with: $base_name"
+}
+
+function setup-kts-env() {
+    if [[ -z "$SCRIPTS_DIR" ]]; then
+        echo "Error: SCRIPTS_DIR is not set."
+        return 1
+    fi
+
+    local root="$SCRIPTS_DIR/kts"
+    local src="$root/src/main/kotlin/com/custom/host"
+    
+    mkdir -p "$root/scripts"
+    mkdir -p "$src"
+    mkdir -p "$SCRIPTS_DIR/bin"
+
+    # 1. build.gradle.kts
+    cat <<EOF > "$root/build.gradle.kts"
+plugins {
+    kotlin("jvm") version "1.9.22"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
+    application
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation(kotlin("stdlib"))
+    implementation(kotlin("scripting-common"))
+    implementation(kotlin("scripting-jvm"))
+    implementation(kotlin("scripting-jvm-host"))
+    implementation(kotlin("scripting-dependencies")) 
+    implementation(kotlin("scripting-dependencies-maven"))
+    
+    // --- GLOBAL LIBRARIES FOR ALL SCRIPTS ---
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0") 
+    // Add more here, then run './gradlew shadowJar'
+}
+
+application {
+    mainClass.set("com.custom.host.MainKt")
+}
+
+tasks.shadowJar {
+    archiveFileName.set("host.jar")
+}
+EOF
+
+    # 2. settings.gradle.kts
+    echo 'rootProject.name = "kts-host"' > "$root/settings.gradle.kts"
+
+    # 3. Script Definition (Definition.kt)
+    cat <<EOF > "$src/Definition.kt"
+package com.custom.host
+
+import kotlin.script.experimental.annotations.KotlinScript
+import kotlin.script.experimental.api.*
+import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
+import kotlin.script.experimental.jvm.jvm
+import kotlin.script.experimental.jvm.jvmAnnotationProcessor
+import kotlin.script.experimental.dependencies.*
+import kotlin.script.experimental.dependencies.maven.MavenDependenciesResolver
+
+@KotlinScript(
+    fileExtension = "kexe.kts",
+    compilationConfiguration = ShellScriptConfiguration::class
+)
+abstract class ShellScript
+
+object ShellScriptConfiguration : ScriptCompilationConfiguration({
+    jvm {
+        // This allows scripts to see dependencies defined in build.gradle.kts
+        dependenciesFromCurrentContext(wholeClasspath = true) 
+    }
+    defaultImports(
+        "java.io.File",
+        "kotlin.system.exitProcess",
+        "kotlinx.coroutines.*"
+    )
+    jvmAnnotationProcessor(FileSystemDependenciesResolver(), MavenDependenciesResolver())
+    ide {
+        acceptedLocations(ScriptAcceptedLocation.Everywhere)
+    }
+})
+EOF
+
+    # 4. Main Entry Point (Main.kt)
+    cat <<EOF > "$src/Main.kt"
+package com.custom.host
+
+import java.io.File
+import kotlin.script.experimental.api.*
+import kotlin.script.experimental.host.toScriptSource
+import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
+import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
+
+fun main(args: Array<String>) {
+    if (args.isEmpty()) {
+        println("Host Error: No script file provided.")
+        System.exit(1)
+    }
+
+    val scriptFile = File(args[0])
+    if (!scriptFile.exists()) {
+        System.err.println("Host Error: File not found: \${scriptFile.absolutePath}")
+        System.exit(1)
+    }
+
+    val scriptArgs = args.drop(1).toTypedArray()
+    val scriptingHost = BasicJvmScriptingHost()
+    val config = createJvmCompilationConfigurationFromTemplate<ShellScript>()
+    
+    val result = scriptingHost.eval(scriptFile.toScriptSource(), config, ScriptEvaluationConfiguration {
+        constructorArgs(scriptArgs)
+    })
+
+    if (result is ResultWithDiagnostics.Failure) {
+        result.reports.forEach { System.err.println(it.message) }
+        System.exit(1)
+    }
+}
+EOF
+
+    # 5. Compile for the first time
+    echo "Files created. Compiling host environment..."
+    cd "$root" || return
+    # Initial gradle run
+    gradle shadowJar
+    
+    echo "✅ Setup complete. Host JAR created at $root/build/libs/host.jar"
+}
+
+function rebuild-kts() {
+    if [[ -z "$SCRIPTS_DIR" ]]; then
+        echo "Error: SCRIPTS_DIR not set."
+        return 1
+    fi
+    echo "Rebuilding Kotlin Scripting Host..."
+    (cd "$SCRIPTS_DIR/kts" && gradle shadowJar)
+    echo "✅ Host updated."
+}

@@ -1,0 +1,13 @@
+# sysinfo: Displays system information.
+# Usage: sysinfo
+system_summary() {
+    echo "--- System Information ---"
+    echo "Hostname: $(hostname)"
+    echo "OS: $(sw_vers -productName) $(sw_vers -productVersion)"
+    echo "Kernel: $(uname -a)"
+    echo "Uptime: $(uptime)"
+    echo "CPU: $(sysctl -n machdep.cpu.brand_string)"
+    echo "Memory: $(sysctl -n hw.memsize | awk '{print $1/1024/1024/1024 " GB"}')"
+    echo "Shell: $SHELL"
+    echo "--------------------------"
+}

@@ -1,0 +1,14 @@
+# json: Pretty-prints JSON from a file or stdin.
+# Usage: json [file.json] | cat file.json | json
+json() {
+    if [ -t 0 ]; then # If stdin is a terminal (no pipe)
+        if [ -f "$1" ]; then
+            python3 -m json.tool "$1"
+        else
+            echo "Usage: json [file.json] or pipe JSON to it"
+            return 1
+        fi
+    else # If stdin is a pipe
+        python3 -m json.tool
+    fi
+}

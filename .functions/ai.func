@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+ai() {
+  local GEMINI_MODELS=("gemini-2.5-flash-lite" "gemini-2.5-pro" "gemini-2.5-flash")
+  local GEMINI_ALIASES=("flash-lite" "pro" "flash")
+  local GEMINI_MODEL
+  local USER_PROMPT
+
+  # Helper to resolve model name or alias
+  resolve_model() {
+    local input="$1"
+    for i in $(seq 0 $((${#GEMINI_MODELS[@]} - 1))); do
+      if [[ "$input" == "${GEMINI_MODELS[$i]}" || "$input" == "${GEMINI_ALIASES[$i]}" ]]; then
+        echo "${GEMINI_MODELS[$i]}"
+        return
+      fi
+    done
+    echo ""
+  }
+
+  # Load default model from ~/.env if exists
+  if [ -f "$HOME/.env" ]; then
+    DEFAULT_GEMINI_MODEL=$(grep '^DEFAULT_GEMINI_MODEL=' "$HOME/.env" | cut -d'=' -f2)
+  fi
+
+  # Help command
+  if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo "Usage: ai [model|alias] prompt"
+    echo "       ai --set-default [model|alias]"
+    echo "       ai --help"
+    echo
+    echo "Models: ${GEMINI_MODELS[*]}"
+    echo "Aliases: ${GEMINI_ALIASES[*]}"
+    echo
+    echo "Set default model: ai --set-default [model|alias]"
+    echo "Default model is stored in ~/.env as DEFAULT_GEMINI_MODEL"
+    return
+  fi
+
+  # Set default model command
+  if [[ "$1" == "--set-default" && -n "$2" ]]; then
+    local resolved_model
+    resolved_model=$(resolve_model "$2")
+    if [[ -n "$resolved_model" ]]; then
+      setenv DEFAULT_GEMINI_MODEL "$resolved_model"
+      echo "Default Gemini model set to: $resolved_model"
+    else
+      echo "Invalid model or alias: $2"
+    fi
+    return
+  fi
+
+  # Non-interactive mode: ai [model|alias] prompt
+  if [[ $# -gt 0 ]]; then
+    local resolved_model
+    resolved_model=$(resolve_model "$1")
+    if [[ -n "$resolved_model" ]]; then
+      GEMINI_MODEL="$resolved_model"
+      shift
+      llm models default "$GEMINI_MODEL"
+      setenv DEFAULT_GEMINI_MODEL "$GEMINI_MODEL"
+    else
+      GEMINI_MODEL="${DEFAULT_GEMINI_MODEL:-${GEMINI_MODELS[0]}}"
+    fi
+    USER_PROMPT="$*"
+    if [ -n "$USER_PROMPT" ]; then
+      llm -s "$AI_SYSTEM_PROMPT" "$USER_PROMPT" | glow
+    fi
+    return
+  fi
+
+  # Interactive mode
+  local prompted=true
+  while $prompted; do
+    USER_PROMPT=$(gum input --header="Prompt AI (type !model to change Gemini model, !help for help, Ctrl+C to exit)")
+    if [ "$USER_PROMPT" = "!model" ]; then
+      local choices=("${GEMINI_MODELS[@]}" "${GEMINI_ALIASES[@]}")
+      GEMINI_MODEL=$(gum choose "${choices[@]}" --header="Select a Gemini model or alias to set as default")
+      GEMINI_MODEL=$(resolve_model "$GEMINI_MODEL")
+      if [ -n "$GEMINI_MODEL" ]; then
+        llm models default "$GEMINI_MODEL"
+        setenv DEFAULT_GEMINI_MODEL "$GEMINI_MODEL"
+        echo "Default model set to: $GEMINI_MODEL"
+      fi
+      continue
+    fi
+    if [ "$USER_PROMPT" = "!help" ]; then
+      echo "Usage: ai [model|alias] prompt"
+      echo "       ai --set-default [model|alias]"
+      echo "       ai --help"
+      echo
+      echo "Models: ${GEMINI_MODELS[*]}"
+      echo "Aliases: ${GEMINI_ALIASES[*]}"
+      echo
+      echo "Set default model: ai --set-default [model|alias]"
+      echo "Default model is stored in ~/.env as DEFAULT_GEMINI_MODEL"
+      continue
+    fi
+    if [ -n "$USER_PROMPT" ]; then
+      GEMINI_MODEL="${DEFAULT_GEMINI_MODEL:-${GEMINI_MODELS[0]}}"
+      llm -s "$AI_SYSTEM_PROMPT" "$USER_PROMPT" | glow
+      prompted=false
+    fi
+  done
+}

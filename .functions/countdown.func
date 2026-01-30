@@ -1,0 +1,15 @@
+# countdown: A simple countdown timer.
+# Usage: countdown <seconds>
+countdown() {
+  local seconds="$1"
+  if ! [[ "$seconds" =~ ^[0-9]+$ ]]; then
+    echo "Usage: countdown <seconds>"
+    return 1
+  fi
+  while [ $seconds -gt 0 ]; do
+    echo -ne "$seconds\033[0K\r"
+    sleep 1
+    : $((seconds--))
+  done
+  echo "Time's up!"
+}

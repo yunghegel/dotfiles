@@ -1,0 +1,15 @@
+# crypto: Get cryptocurrency prices.
+# Usage: crypto <coin_name> [currency]
+# Example: crypto bitcoin usd
+crypto() {
+  local coin="${1:-bitcoin}"
+  local currency="${2:-usd}"
+  local api_url="https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=${currency}"
+  local response=$(curl -s "$api_url")
+  local price=$(echo "$response" | sed -e 's/.*"'"$currency"'":\([0-9.]*\).*/\1/')
+  if [ -z "$price" ] || [ "$price" == "$response" ]; then
+      echo "Could not fetch price for $coin in $currency"
+      return 1
+  fi
+  echo "$(tr '[:lower:]' '[:upper:]' <<< ${coin:0:1})${coin:1}: $price $currency"
+}

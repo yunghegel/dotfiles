@@ -1,0 +1,99 @@
+#
+# Appends a line of text to a file using natural language syntax.
+#
+# @description
+#   Safely appends a string to the end of a specified file. This function
+#   parses a natural language-like sentence to determine the text and
+#   the target file.
+#
+# @usage
+#   append [create] <text_to_append> to <file_path>
+#   append [create] to <file_path> <text_to_append>
+#
+# @params
+#   create         (Optional keyword) Create the file (and path) if it doesn't exist.
+#   to             (Required keyword) Delimiter that precedes the file path.
+#   <text>         The string of text to append. Can be placed before or after the file path.
+#   <file_path>    The path to the target file. Must follow the 'to' keyword.
+#
+# @returns
+#   0 - On success.
+#   1 - On failure (e.g., syntax error, file doesn't exist without 'create').
+#
+# @examples
+#   append "This is a new line." to my_document.txt
+#   append to log.txt "INFO: Application started on $(date)"
+#   append create "Initial configuration" to settings.conf
+#
+function append() {
+    # Ensure local options, protecting from global shell settings like shwordsplit.
+    emulate -L zsh
+    setopt local_options
+
+    local create_if_missing=false
+    local target_file=""
+    local text_to_append=""
+    local -a text_parts
+    local parsing_state="text" # States: "text", "file", "text_after"
+
+    # Use a copy of the arguments to allow for 'shift'.
+    local -a args=("$@")
+
+    # Check for the optional 'create' keyword as the first argument.
+    if [[ "${args[1]}" == "create" ]]; then
+        create_if_missing=true
+        shift args # CORRECTED: Use 'shift' as a command, not a method.
+    fi
+
+    # Find the 'to' keyword. If not found, it's a syntax error.
+    # CORRECTED: Switched to a more explicit check for readability.
+    if [[ ${args[(I)to]} -eq 0 ]]; then
+        print -u2 "append: error: Missing 'to' keyword."
+        print -u2 "Usage: append [create] <text> to <file_path>"
+        return 1
+    fi
+
+    # Process arguments with a stateful loop for robustness.
+    for arg in "${args[@]}"; do
+        if [[ "$parsing_state" == "text" ]]; then
+            if [[ "$arg" == "to" ]]; then
+                parsing_state="file" # Switch state to look for the file path next.
+            else
+                text_parts+=("$arg") # Collect text before 'to'.
+            fi
+        elif [[ "$parsing_state" == "file" ]]; then
+            target_file="$arg"
+            parsing_state="text_after" # Switch state to collect any remaining text.
+        else # parsing_state is "text_after"
+            text_parts+=("$arg") # Collect text after the file path.
+        fi
+    done
+
+    # Join the collected text parts into a single string.
+    text_to_append="${(j: :)text_parts}"
+
+    # --- Syntax Validation ---
+    if [[ -z "$target_file" ]]; then
+        print -u2 "append: error: Missing file path after 'to' keyword."
+        print -u2 "Usage: append [create] <text> to <file_path>"
+        return 1
+    fi
+
+    if [[ -z "$text_to_append" ]]; then
+        print -u2 "append: error: Missing text to append."
+        print -u2 "Usage: append [create] <text> to <file_path>"
+        return 1
+    fi
+
+    # --- Core Logic ---
+    if [[ -f "$target_file" ]]; then
+        print -r -- "$text_to_append" >> "$target_file"
+    elif [[ "$create_if_missing" == "true" ]]; then
+        mkdir -p -- "$target_file:h" && print -r -- "$text_to_append" > "$target_file"
+    else
+        print -u2 "append: error: File '$target_file' does not exist. Use 'create' keyword to create it."
+        return 1
+    fi
+
+    return 0
+}

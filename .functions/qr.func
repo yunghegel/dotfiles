@@ -1,0 +1,9 @@
+# qr: Generates a QR code from text.
+# Usage: qr <text>
+qr() {
+    if [ -z "$1" ]; then
+        echo "Usage: qr <text>"
+        return 1
+    fi
+    curl -s "https://qrenco.de/$1"
+}

@@ -1,0 +1,61 @@
+    function unz() {
+      if [[ -z "$1" ]]; then
+        echo "Usage: unz <zip_file>"
+        return 1
+      fi
+
+      local zip_file="$1"
+
+      # Ensure the provided file exists
+      if ! [[ -f "$zip_file" ]]; then
+        echo "Error: File '$zip_file' not found."
+        return 1
+      fi
+
+      local dir_name=$(dirname -- "$zip_file")
+      local base_name=$(basename -- "$zip_file")
+      local folder_name="${base_name%.zip}" # Remove .zip extension
+
+      # Validate that the file has a .zip extension
+      if [[ "$base_name" == "$folder_name" ]]; then
+        echo "Error: '$zip_file' does not appear to be a .zip file."
+        return 1
+      fi
+
+      local target_dir="${dir_name}/${folder_name}"
+
+      # Check if the target directory already exists to ensure a "new folder"
+  is created
+      if [[ -d "$target_dir" ]]; then
+        echo "Error: Target directory '$target_dir' already exists."
+        echo "Please remove it first or choose a different name if you want a
+  truly 'new' folder."
+        return 1
+      fi
+
+      echo "Unzipping '$base_name' to new folder '$target_dir'..."
+
+      # Create the target directory. mkdir -p is used for robustness, though
+  unlikely
+      # to be strictly necessary for a sibling directory.
+      mkdir -p "$target_dir" || {
+        echo "Error: Could not create target directory '$target_dir'."
+        return 1
+      }
+
+      # Unzip quietly (-q) into the target directory (-d)
+      if unzip -q "$zip_file" -d "$target_dir"; then
+        echo "Successfully unzipped '$base_name' to '$folder_name'."
+        return 0
+      else
+        echo "Error: Failed to unzip '$zip_file'."
+        # Attempt to clean up the created directory if unzip failed and it's
+  empty
+        if [[ -d "$target_dir" ]] && ! command find "$target_dir" -mindepth 1 -
+  print -quit | grep -q .; then
+          echo "Removing empty target directory '$target_dir'."
+          rmdir "$target_dir" 2>/dev/null
+        fi
+        return 1
+      fi
+    }

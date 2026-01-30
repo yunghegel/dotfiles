@@ -1,0 +1,45 @@
+Host 150.136.70.117
+  HostName 150.136.70.117
+  User jamie
+
+Host 34.138.207.152
+  HostName 34.138.207.152
+  User jamie
+
+Host yunghegel.dev
+  HostName 34.138.207.152
+  User jamie
+  IdentityFile ~/.ssh/id_rsa
+
+Host 34.66.92.37
+  HostName 34.66.92.37
+  User jamie
+  IdentityFile ~/.ssh/id_rsa
+
+Host 34.66.92.37
+  HostName 34.66.92.37
+  User jamie
+  IdentityFile ~/.ssh/id_rsa
+
+Host yunghegel.org
+  HostName yunghegel.org
+  User jamie
+Host *
+  IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+  StrictHostKeyChecking no
+
+Host jamiecrown.dev
+  HostName 178.156.150.221
+  User jamie
+
+
+Host root.dev
+  HostName 178.156.150.221
+  User root
+
+Host oracle
+  HostName 129.213.89.189
+  User jamie
+  IdentityFile ~/.ssh/id_rsa
+
+  

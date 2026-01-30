@@ -1,0 +1,9 @@
+# searchhist: Searches your shell command history.
+# Usage: searchhist <pattern>
+searchhist() {
+    if [ -z "$1" ]; then
+        echo "Usage: searchhist <pattern>"
+        return 1
+    fi
+    history | grep --color=auto "$1"
+}

@@ -1,0 +1,48 @@
+url() {
+    # If no arguments are provided, call the original open command
+    if [ $# -eq 0 ]; then
+        command open
+        return
+    fi
+
+    local arg="$1"
+    shift
+
+    # If the argument is a file or directory, open it directly
+    if [ -e "$arg" ]; then
+        command open "$arg" "$@"
+        return
+    fi
+
+    # If the argument already has a protocol, open it
+    if [[ "$arg" =~ ^[a-zA-Z]+:// ]]; then
+        command open "$arg" "$@"
+        return
+    fi
+
+    # If the argument contains a dot, assume it's a domain and add http://
+    if [[ "$arg" == *.* ]]; then
+        local url="http://$arg"
+        # Try to resolve the domain with a timeout of 2 seconds
+        if dig +short +time=2 "$arg" &>/dev/null; then
+            command open "$url" "$@"
+            return
+        fi
+    fi
+
+    # If the argument is a single word, try appending common TLDs
+    local tlds=("com" "net" "org" "io" "dev" "co" "uk" "info" "biz" "me")
+    for tld in "${tlds[@]}"; do
+        local domain="$arg.$tld"
+        local url="http://$domain"
+        echo "Trying to resolve $domain..."
+        # Try to resolve the domain with a timeout of 2 seconds
+        if dig +short +time=2 "$domain" &>/dev/null; then
+            command open "$url" "$@"
+            return
+        fi
+    done
+
+    echo "Could not resolve '$arg' as a URL. Opening with default behavior."
+    command open "$arg" "$@"
+}

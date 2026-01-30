@@ -1,0 +1,47 @@
+function create_dependency_aware_link() {
+    if [[ -z "$1" || -z "$2" ]]; then
+        echo "Usage: create_dependency_aware_link <source_binary_path> <target_directory>" >&2
+        return 1
+    fi
+
+    local source_binary_path="$1"
+    local target_directory="$2"
+
+    if [[ ! -f "$source_binary_path" ]]; then
+        echo "Error: Source binary '$source_binary_path' not found." >&2
+        return 1
+    fi
+
+    if [[ ! -d "$target_directory" ]]; then
+        echo "Error: Target directory '$target_directory' not found or is not a directory." >&2
+        return 1
+    fi
+
+    local source_binary_abspath
+    source_binary_abspath="$(cd "$(dirname "$source_binary_path")" && pwd)/$(basename "$source_binary_path")"
+
+    local source_folder
+    source_folder="$(dirname "$source_binary_abspath")"
+
+    local binary_name
+    binary_name="$(basename "$source_binary_abspath")"
+
+    local target_script_path="${target_directory}/${binary_name}"
+
+    cat > "$target_script_path" <<EOF
+#!/bin/zsh
+
+original_binary_path="${source_binary_abspath}"
+source_dependency_dir="${source_folder}"
+
+export LD_LIBRARY_PATH="\${source_dependency_dir}\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
+export DYLD_LIBRARY_PATH="\${source_dependency_dir}\${DYLD_LIBRARY_PATH:+:\${DYLD_LIBRARY_PATH}}"
+
+exec "\${original_binary_path}" "\$@"
+EOF
+
+    chmod +x "$target_script_path"
+
+    echo "Wrapper script '$binary_name' created at '$target_script_path'."
+    echo "Dependencies resolved from '$source_folder'."
+}

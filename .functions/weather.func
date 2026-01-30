@@ -1,0 +1,6 @@
+# weather: Gets the weather for a given location.
+# Usage: weather [location]
+weather() {
+    local location="$1"
+    curl -s "https://wttr.in/${location}"
+}

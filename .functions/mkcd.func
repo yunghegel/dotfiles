@@ -1,0 +1,9 @@
+# mkcd: Creates a directory and changes into it.
+# Usage: mkcd <directory_name>
+mkcd() {
+    if [ -z "$1" ]; then
+        echo "Usage: mkcd <directory_name>"
+        return 1
+    fi
+    mkdir -p "$1" && cd "$1"
+}

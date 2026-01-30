@@ -1,0 +1,50 @@
+# dusage: Shows the top N largest files and directories, or disk usage by depth.
+# Usage: dusage [directory] [N]
+#        dusage --fs [depth] [directory]
+dusage() {
+    if [[ "$1" == "--fs" ]]; then
+        shift # Consume --fs
+
+        local depth=1
+        local target_dir="."
+
+        # Argument 1: depth (optional)
+        if [[ "$1" =~ ^[0-9]+$ ]]; then
+            depth="$1"
+            shift
+        fi
+
+        # Argument 2: directory (optional)
+        if [[ -n "$1" ]]; then
+            target_dir="$1"
+            shift
+        fi
+
+        if [ ! -d "$target_dir" ]; then
+            echo "Error: Directory '$target_dir' not found."
+            return 1
+        fi
+
+        echo "Disk usage for '$target_dir' at depth $depth:"
+        du -hd "$depth" "$target_dir" | sort -hr
+    else
+        # Original behavior
+        local target_dir="${1:-.}"
+        local top_n="${2:-10}"
+
+        if [ ! -d "$target_dir" ]; then
+            echo "Error: Directory '$target_dir' not found."
+            return 1
+        fi
+
+        if ! [[ "$top_n" =~ ^[0-9]+$ ]]; then
+            if [ -n "$2" ]; then
+                echo "Error: N must be a number."
+                return 1
+            fi
+        fi
+
+        echo "Top $top_n largest files/directories in '$target_dir':"
+        (cd "$target_dir" && du -ah . | sort -hr | head -n "$top_n")
+    fi
+}

@@ -1,0 +1,38 @@
+
+                                                                              
+    function move_non_dirs() {                                                
+      if [[ $# -ne 1 ]]; then                                                 
+        echo "Usage: move_non_dirs <target_directory>"                        
+        return 1                                                              
+      fi                                                                      
+                                                                              
+      local target_dir="$1"                                                   
+                                                                              
+      if [[ ! -d "$target_dir" ]]; then                                       
+        echo "Error: '$target_dir' is not a valid directory."                 
+        return 1                                                              
+      fi                                                                      
+                                                                              
+      # Collect all non-directory files in the current directory.             
+      # The glob qualifier (^/) matches any file that is NOT a directory.     
+      # The glob qualifier (D) ensures dotfiles (hidden files) are also       
+  included.                                                                   
+      local files_to_move=( *(D^/) )                                          
+                                                                              
+      if [[ ${#files_to_move[@]} -eq 0 ]]; then                               
+        echo "No non-directory files found in the current directory to move." 
+        return 0                                                              
+      fi                                                                      
+                                                                              
+      mv "${files_to_move[@]}" "$target_dir"                                  
+                                                                              
+      if [[ $? -eq 0 ]]; then                                                 
+        echo "Successfully moved ${#files_to_move[@]} non-directory items to  
+  '$target_dir'."                                                             
+        return 0                                                              
+      else                                                                    
+        echo "Error: Failed to move items. Check file permissions or locks."  
+        return 1                                                              
+      fi                                                                      
+    }                                                                         
+

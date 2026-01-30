@@ -1,0 +1,5 @@
+# ports: Lists open ports and the processes using them.
+# Usage: ports
+lsports() {
+    lsof -i -P | grep LISTEN
+}

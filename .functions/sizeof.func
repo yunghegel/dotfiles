@@ -1,0 +1,31 @@
+function sizeof() {                                                   
+      local target_dir="."                                                    
+      local depth=""                                                          
+                                                                              
+      # Determine if the first argument is a numeric depth                    
+      if [[ "$1" =~ ^[0-9]+$ ]]; then                                         
+        depth="$1"                                                            
+        target_dir="${2:-.}" # If depth is provided, the second arg is the    
+  directory, default to current.                                              
+      else                                                                    
+        target_dir="${1:-.}" # If no depth, the first arg is the directory,   
+  default to current.                                                         
+      fi                                                                      
+                                                                              
+      # Validate that the target is a directory                               
+      if ! [[ -d "$target_dir" ]]; then                                       
+        echo "Error: Directory '$target_dir' not found or not a directory."   
+  >&2                                                                         
+        return 1                                                              
+      fi                                                                      
+                                                                              
+      # Execute du based on whether depth was provided                        
+      if [[ -n "$depth" ]]; then                                              
+        # With depth, show sizes of directories/files up to the specified     
+  depth                                                                       
+        sudo du -h --max-depth="$depth" "$target_dir"                              
+      else                                                                    
+        # Without depth, show total summary size of the directory             
+        sudo du -sh "$target_dir"                                                  
+      fi                                                                      
+}                

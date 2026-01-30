@@ -1,0 +1,17 @@
+# cleanup: Cleans up common temporary files and empties the trash.
+# Usage: cleanup
+cleanup() {
+    read -p "This will empty your trash and remove temporary files. Are you sure? (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Cleaning up..."
+        if [ -d "$HOME/.Trash" ]; then
+            echo "Emptying the trash..."
+            rm -rf "$HOME/.Trash"/*
+            echo "Trash emptied."
+        fi
+        echo "Cleanup complete."
+    else
+        echo "Cleanup cancelled."
+    fi
+}

@@ -1,0 +1,96 @@
+function mkscript() {
+    # Parse flags
+    local open_flag=false
+    while [[ "$1" == -* ]]; do
+        case "$1" in
+            -o|--open)
+                open_flag=true
+                shift
+                ;;
+            *)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: mkscript [-o|--open] <filename>" >&2
+                return 1
+                ;;
+        esac
+    done
+
+    # Check if the SCRIPTS_DIR environment variable is set
+    if [[ -z "$SCRIPTS_DIR" ]]; then
+      echo "Error: SCRIPTS_DIR environment variable is not set." >&2
+      return 1
+    fi
+
+    # Check if a filename argument was provided
+    if [[ -z "$1" ]]; then
+      echo "Usage: mkscript [-o|--open] <filename>" >&2
+      return 1
+    fi
+
+    # Parse the filename. Note: :t, :e, and :r are Zsh-specific modifiers.
+    # For Bash compatibility, consider using `basename` and parameter expansion.
+    local original_filename="$1"
+    local base_name="${original_filename:t}" 
+    local extension="${original_filename:e}"
+    local target_dir
+
+    # Determine the target directory based on the file extension
+    if [[ -z "$extension" ]]; then
+      target_dir="$SCRIPTS_DIR/bin"
+    else
+      target_dir="$SCRIPTS_DIR/$extension"
+    fi
+
+    # Create the target directory if it doesn't exist
+    mkdir -p "$target_dir" || {
+      echo "Error: Could not create directory '$target_dir'." >&2
+      return 1
+    }
+
+    local full_path="$target_dir/$base_name"
+
+    # Check if the file already exists
+    if [[ -e "$full_path" ]]; then
+      echo "Error: File '$full_path' already exists." >&2
+      return 1
+    fi
+
+    # Create the file
+    touch "$full_path" || {
+      echo "Error: Could not create file '$full_path'." >&2
+      return 1
+    }
+
+    # Make the file executable
+    chmod +x "$full_path" || {
+      echo "Error: Could not make file '$full_path' executable." >&2
+      return 1
+    }
+
+    echo "Created and made executable: $full_path"
+
+    # If the script has an extension, create a symlink in the bin directory
+    # for easy access without typing the extension.
+    if [[ -n "$extension" ]]; then
+      local name_without_ext="${base_name:r}"
+      local bin_link="$SCRIPTS_DIR/bin/$name_without_ext"
+      
+      # Ensure the bin directory exists for the symlink
+      mkdir -p "$SCRIPTS_DIR/bin"
+      
+      if [[ -e "$bin_link" ]]; then
+        echo "Warning: Link '$bin_link' already exists. Skipping symlink creation." >&2
+      else
+        ln -s "$full_path" "$bin_link" || {
+        echo "Error: Could not create symlink '$bin_link'." >&2
+        return 1
+        }
+        echo "Created symlink: $bin_link -> $full_path"
+      fi
+    fi
+
+    # Open in VS Code if flag is set
+    if [[ "$open_flag" == true ]]; then
+      code "$full_path"
+    fi
+}

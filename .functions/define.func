@@ -1,0 +1,33 @@
+define() {
+  local env_file="${HOME}/.env"
+
+  if [ "$1" = "unset" ]; then
+    if (( $# != 2 )); then
+      echo "Usage: define unset <KEY>"
+      return 1
+    fi
+    local key="$2"
+    sed -i '' "/^export ${key}=.*/d" "$env_file"
+    echo "Removed '${key}' from '${env_file}'."
+    source "$env_file"
+    return 0
+  fi
+
+  if (( $# != 2 )); then
+    echo "Usage: define <KEY> <VALUE>"
+    return 1
+  fi
+
+  local key="$1"
+  local value="$2"
+
+  if grep -qE "^export ${key}=" "$env_file"; then
+    echo "Key '${key}' already exists in '${env_file}'. Skipping."
+    return 0
+  fi
+
+  echo "export ${key}=${value}" >> "$env_file"
+  echo "Appended '${key}=${value}' to '${env_file}'."
+
+  source "$env_file"
+}

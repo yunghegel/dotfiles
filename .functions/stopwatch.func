@@ -1,0 +1,20 @@
+# stopwatch: A simple stopwatch.
+# Usage: stopwatch
+stopwatch() {
+    local start_time=$(date +%s)
+    echo "Stopwatch started. Press Ctrl+C to stop."
+    trap '
+        local end_time=$(date +%s)
+        local elapsed=$((end_time - start_time))
+        echo -e "\nStopwatch stopped."
+        echo "Elapsed time: $elapsed seconds."
+        trap - INT
+        return
+    ' INT
+    while true; do
+        local current_time=$(date +%s)
+        local elapsed=$((current_time - start_time))
+        echo -ne "Elapsed time: $elapsed seconds\r"
+        sleep 1
+    done
+}

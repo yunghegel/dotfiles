@@ -1,0 +1,17 @@
+# backup: Creates a timestamped backup of a file or directory.
+# Usage: backup <file_or_directory>
+backup() {
+  local item="$1"
+  if [ -z "$item" ]; then
+    echo "Usage: backup <file_or_directory>"
+    return 1
+  fi
+  if [ ! -e "$item" ]; then
+    echo "Error: '$item' not found."
+    return 1
+  fi
+  local timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+  local backup_name="${item}.${timestamp}.bak"
+  cp -r "$item" "$backup_name"
+  echo "Backup created: $backup_name"
+}

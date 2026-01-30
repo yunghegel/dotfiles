@@ -1,0 +1,13 @@
+
+alias mvfiles='mv -- *(DN)'
+alias love="/Applications/love.app/Contents/MacOS/love"
+alias edit="open -a TextEdit"
+#alias claude="llm -m claude-3-sonnet"
+# alias gemini="llm -m $GEMINI_MODEL"
+alias arduino="arduino-cli"
+alias shellcfg="micro ~/.zshrc"
+alias server='sshpass -p "1227" ssh jamie@178.156.150.221'
+alias defroute='cloudflared tunnel route dns website'
+alias gl='open /Users/jamie/geexlab/GeeXLab_macos_arm64/GeeXLab.app'
+alias oracle='ssh jamie@129.213.89.189'
+alias f="cd ~ && cd \$(find ~/code -type d \( -name node_modules -o -name .git \) -prune -o -type d -print | fzf)"                                                                        

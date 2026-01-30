@@ -1,0 +1,48 @@
+setenv() {
+    local OVERWRITE=false
+    local KEY VALUE
+    
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -o|--overwrite)
+                OVERWRITE=true
+                shift
+                ;;
+            *)
+                if [[ -z "$KEY" ]]; then
+                    KEY=$1
+                elif [[ -z "$VALUE" ]]; then
+                    VALUE=$1
+                else
+                    echo "Usage: setenv [-o|--overwrite] <KEY> <VALUE>"
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    ENV_FILE="${HOME}/.env"
+    
+    if [[ -z "$KEY" || -z "$VALUE" ]]; then
+        echo "Usage: setenv [-o|--overwrite] <KEY> <VALUE>"
+        return 1
+    fi
+    
+    # Check if key already exists
+    if grep -qE "^export ${KEY}=" "$ENV_FILE"; then
+        if [[ "$OVERWRITE" == true ]]; then
+            sed -i '' "s|^export ${KEY}=.*|export ${KEY}=${VALUE}|" "$ENV_FILE"
+            echo "Updated '${KEY}' in '${ENV_FILE}'."
+        else
+            echo "Error: '${KEY}' already exists in '${ENV_FILE}'. Use -o to overwrite."
+            return 1
+        fi
+    else
+        echo "export ${KEY}=${VALUE}" >> "$ENV_FILE"
+        echo "Appended '${KEY}=${VALUE}' to '${ENV_FILE}'."
+    fi
+    
+    source "$ENV_FILE"
+}

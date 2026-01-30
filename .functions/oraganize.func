@@ -1,0 +1,128 @@
+#
+# Depends on the `exists` function.
+#
+# @description
+#   Organizes a directory by moving files and subdirectories into categorized
+#   folders (Images, Documents, InstallationMedia, Folders, etc.).
+#
+# @usage
+#   organize <directory_path>
+#
+# @params
+#   $1 - The path to the directory to organize.
+#
+# @returns
+#   0 - On successful completion.
+#   1 - If an error occurs (e.g., directory not found, no argument).
+#
+organize() {
+  # --- Argument and Dependency Checks ---
+  if [[ "$1" == "-h" || "$1" == "--help" || $# -eq 0 ]]; then
+    echo "Usage: organize <directory_path>" >&2
+    echo "  Sorts files, installers, and subdirectories in the specified location." >&2
+    return 1
+  fi
+  
+  if ! command -v exists &>/dev/null; then
+    echo "Error: The required 'exists' utility function is not loaded." >&2
+    return 1
+  fi
+
+  local target_dir="$1"
+
+  # --- Pre-flight Checks ---
+  if ! exists -d "$target_dir"; then
+    echo "Error: Target '$target_dir' is not a valid directory. Exiting." >&2
+    return 1
+  fi
+  
+  echo "Target directory found. Starting organization in '$target_dir'..."
+
+  # Define and create destination subdirectories.
+  declare -A DEST_DIRS=(
+    [Images]="$target_dir/Images"
+    [Documents]="$target_dir/Documents"
+    [Archives]="$target_dir/Archives"
+    [InstallationMedia]="$target_dir/Installation Media"
+    [Folders]="$target_dir/Folders"
+    [Other]="$target_dir/Other"
+  )
+
+  for dir_path in "${DEST_DIRS[@]}"; do
+    if ! exists -d "$dir_path"; then
+      echo "Creating destination directory: $dir_path"
+      mkdir -p "$dir_path"
+    fi
+  done
+
+  # --- Main Logic ---
+
+  # Loop through every item in the target directory.
+  for item in "$target_dir"/*; do
+    # Skip if no files match the glob
+    [[ ! -e "$item" ]] && continue
+  
+    # Case 1: The item is a regular file.
+  if [[ -f "$item" ]]; then
+      local filename="$(basename "$item")"
+      local extension="${filename##*.}"
+      extension="$(echo "$extension" | tr '[:upper:]' '[:lower:]')" # Convert to lowercase
+
+      case "$extension" in
+        jpg|jpeg|png|gif|webp|heic|bmp|tiff|svg|raw|cr2|nef)
+          echo "  -> Moving image: $filename"
+          mv "$item" "${DEST_DIRS[Images]}/"
+          ;;
+        pdf|docx|doc|txt|md|pages|csv|rtf|keynote|numbers|pptx|ppt|xlsx|xls)
+          echo "  -> Moving document: $filename"
+          mv "$item" "${DEST_DIRS[Documents]}/"
+          ;;
+        zip|gz|tar|rar|7z|bz2|xz|dmg)
+          echo "  -> Moving archive: $filename"
+          mv "$item" "${DEST_DIRS[Archives]}/"
+          ;;
+        pkg|mpkg|app)
+          echo "  -> Moving installer: $filename"
+          mv "$item" "${DEST_DIRS[InstallationMedia]}/"
+          ;;
+        *)
+          echo "  -> Moving other file: $filename"
+          mv "$item" "${DEST_DIRS[Other]}/"
+          ;;
+      esac
+    
+    # Case 2: The item is a directory.
+    elif [[ -d "$item" ]]; then
+      local dirname="$(basename "$item")"
+      local is_managed_dir=0
+
+      # Check if it's one of our managed directories
+      for managed_dir in "${DEST_DIRS[@]}"; do
+        if [[ "$item" == "$managed_dir" ]]; then
+          is_managed_dir=1
+          break
+        fi
+      done
+      
+      # If it's not a managed directory, decide where it should go.
+      if (( ! is_managed_dir )); then
+        case "$dirname" in
+          *.app)
+            echo "  -> Moving application: $dirname"
+            mv "$item" "${DEST_DIRS[InstallationMedia]}/"
+            ;;
+          *.bundle|*.framework|*.kext|*.prefPane)
+            echo "  -> Moving system component: $dirname"
+            mv "$item" "${DEST_DIRS[InstallationMedia]}/"
+            ;;
+          *)
+            echo "  -> Shelving directory: $dirname"
+            mv "$item" "${DEST_DIRS[Folders]}/"
+            ;;
+        esac
+      fi
+    fi
+  done
+
+  echo "Organization of '$target_dir' complete."
+}

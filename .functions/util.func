@@ -1,0 +1,817 @@
+#
+# Checks if a path exists.
+#
+# @description
+#   Returns a success (0) exit code if the given path exists.
+#   With the -d flag, it checks if the path exists AND is a directory.
+#   With the -f flag, it checks if the path exists AND is a regular file.
+#
+# @usage
+#   exists <path>
+#   exists -d <directory_path>
+#   exists -f <file_path>
+#
+# @returns
+#   0 - The path exists and meets the flag's criteria (if any).
+#   1 - The condition is not met or incorrect arguments were provided.
+#
+exists() {
+  # Provide help text if requested or no arguments are given
+  if [[ "$1" == "-h" || "$1" == "--help" || $# -eq 0 ]]; then
+    print -u2 "Usage: exists [-d|-f] <path>"
+    print -u2 "  Checks for the existence of a file, directory, or path."
+    print -u2 "  -d:  Check for a directory."
+    print -u2 "  -f:  Check for a regular file."
+    return 1
+  fi
+
+  local path_to_check
+
+  # Use a case statement for clean argument parsing
+  case "$1" in
+    -d)
+      # Check if a path was provided after the -d flag
+      if [[ -z "$2" ]]; then
+        print -u2 "Error: Missing path after -d flag."
+        return 1
+      fi
+      path_to_check="$2"
+      # The core test: returns 0 if path is a directory, 1 otherwise
+      [[ -d "$path_to_check" ]]
+      ;;
+    -f)
+      # Check if a path was provided after the -f flag
+      if [[ -z "$2" ]]; then
+        print -u2 "Error: Missing path after -f flag."
+        return 1
+      fi
+      path_to_check="$2"
+      # The core test: returns 0 if path is a regular file, 1 otherwise
+      [[ -f "$path_to_check" ]]
+      ;;
+    *)
+      path_to_check="$1"
+      # The core test: returns 0 if path exists, 1 otherwise
+      [[ -e "$path_to_check" ]]
+      ;;
+  esac
+}
+
+
+#
+# Displays the most frequently used commands from your history.
+#
+# @description
+#   Reads the ZSH history file, extracts the commands (ignoring arguments),
+#   counts them, sorts them, and displays the top N commands.
+#
+# @usage
+#   hist-top [count]
+#
+# @params
+#   $1   (Optional) The number of top commands to show. Defaults to 10.
+#
+# @returns
+#   0 - Always.
+#
+function hist-top() {
+    local count="${1:-10}"
+    
+    # HISTFILE is a ZSH variable pointing to your history file.
+    # We remove the timestamp prefix with `cut`, take the first word with `awk`,
+    # sort, count unique lines, and then sort numerically in reverse.
+    cut -f 2- -d ';' "$HISTFILE" | awk '{print $1}' | sort | uniq -c | sort -nr | head -n "$count"
+}
+
+#
+# Renders a Markdown file as HTML and opens it in a browser.
+#
+# @description
+#   Uses the `pandoc` utility to convert a Markdown file to a temporary
+#   HTML file, and then uses `open` to view it in the default browser.
+#   The temporary file is cleaned up automatically on exit.
+#
+# @usage
+#   previewmd <markdown_file>
+#
+# @params
+#   $1   The path to the Markdown file.
+#
+# @returns
+#   0 - On success.
+#   1 - If pandoc is not installed or file does not exist.
+#
+function previewmd() {
+    # --- Dependency Check ---
+    if ! command -v pandoc &> /dev/null; then
+        print -u2 "Error: 'pandoc' is not installed. Please run 'brew install pandoc'."
+        return 1
+    fi
+    
+    local md_file="$1"
+    
+    # --- Input Validation ---
+    if [[ -z "$md_file" ]]; then
+        print -u2 "Usage: previewmd <markdown_file>"
+        return 1
+    fi
+    
+    if [[ ! -f "$md_file" ]]; then
+        print -u2 "Error: File '$md_file' not found."
+        return 1
+    fi
+    
+    # --- Core Logic ---
+    # Create a temporary file that will be automatically removed
+    local temp_html
+    temp_html=$(mktemp) && temp_html="${temp_html}.html"
+
+    print "Converting '$md_file' to HTML..."
+    # --standalone creates a full HTML file, --self-contained embeds CSS
+    pandoc "$md_file" -f markdown -t html --standalone --self-contained -o "$temp_html"
+    
+    if [[ -f "$temp_html" ]]; then
+        print "Opening in default browser..."
+        open "$temp_html"
+    else
+        print -u2 "Error: Failed to create HTML file."
+        return 1
+    fi
+}
+
+#
+# Displays the weather for a specified location.
+#
+# @description
+#   Queries the wttr.in service to get a weather report formatted
+#   for display in a terminal.
+#
+# @usage
+#   weather [location]
+#
+# @params
+#   $1   (Optional) The location to get weather for. Defaults to your auto-detected location.
+#
+# @returns
+#   Returns the status of the curl command.
+#
+function weather() {
+    local location="$1"
+    
+    # The 'q' option reduces output, 'T' forces terminal colors
+    curl "wttr.in/${location}?qT"
+}
+
+#
+# Deletes local git branches that no longer exist on the remote.
+#
+# @description
+#   First, it fetches the latest state from the remote origin without merging.
+#   Then, it finds all local branches that have been removed on the remote (`git branch -vv`)
+#   and deletes them locally. It's a safe way to prune stale branches.
+#
+# @usage
+#   git-cleanup
+#
+function git-cleanup() {
+    print "Fetching latest remote state..."
+    git remote update origin --prune
+    
+    print "Finding and deleting stale local branches..."
+    # The grep pattern finds lines like '[origin/main: gone]'
+    # awk prints the first field (the branch name)
+    # xargs passes the branch names to git branch -d
+    local stale_branches
+    stale_branches=$(git branch -vv | grep ': gone]' | awk '{print $1}')
+    
+    if [[ -n "$stale_branches" ]]; then
+        print "The following branches will be deleted:"
+        print "$stale_branches"
+        # The `<<<` is a "here string" that passes the variable as standard input
+        xargs -n 1 git branch -d <<< "$stale_branches"
+    else
+        print "No stale branches to clean up."
+    fi
+}
+
+#
+# A simple countdown timer for the shell.
+#
+# @description
+#   Parses a time string (e.g., 5m, 30s, 1h) and displays a live
+#   countdown in the terminal. Plays a system alert sound on completion.
+#
+# @usage
+#   timer <duration> (e.g., timer 10s, timer 5m, timer 1h)
+#
+# @params
+#   $1   The duration. Supported units: s (seconds), m (minutes), h (hours).
+#
+# @returns
+#   0 - On success.
+#   1 - If usage is incorrect.
+#
+function timer() {
+    local time_arg="$1"
+    local seconds=0
+
+    # --- Input Validation and Parsing ---
+    if [[ -z "$time_arg" ]]; then
+        print -u2 "Usage: timer <duration> (e.g., 10s, 5m, 1h)"
+        return 1
+    fi
+
+    # Extract number and unit
+    local num="${time_arg//[!0-9]/}"
+    local unit="${time_arg//[0-9]/}"
+
+    case "$unit" in
+        s) seconds=$((num)) ;;
+        m) seconds=$((num * 60)) ;;
+        h) seconds=$((num * 3600)) ;;
+        *) print -u2 "Error: Invalid time unit. Use 's', 'm', or 'h'." && return 1 ;;
+    esac
+
+    # --- Core Logic ---
+    while [[ $seconds -gt 0 ]]; do
+        # \r moves the cursor to the beginning of the line
+        # -n prevents a newline
+        printf -n "\rTime remaining: %02d:%02d:%02d" $((seconds/3600)) $((seconds%3600/60)) $((seconds%60))
+        sleep 1
+        seconds=$((seconds - 1))
+    done
+
+    printf "\rTime's up!                     \n"
+    # Play the default system alert sound on macOS
+    afplay /System/Library/Sounds/Glass.aiff
+}
+
+#
+# Creates a directory, cds into it, and opens it in your editor.
+#
+# @description
+#   A powerful workflow helper that combines `mkdir`, `cd`, and launching a
+#   text editor into a single command. Respects the $EDITOR environment variable.
+#
+# @usage
+#   take <directory_name>
+#
+# @params
+#   $1   The name of the new project directory.
+#
+# @returns
+#   0 - On success.
+#   1 - On failure.
+#
+function take() {
+    # --- Input Validation ---
+    if [[ -z "$1" ]]; then
+        print -u2 "Usage: take <directory_name>"
+        return 1
+    fi
+
+    if [[ -z "$EDITOR" ]]; then
+        print -u2 "Error: \$EDITOR environment variable is not set."
+        return 1
+    fi
+    
+    # --- Core Logic ---
+    mkdir -p "$1" && cd "$1" && "$EDITOR" .
+}
+
+#
+# Clones a git repository and immediately cds into it.
+#
+# @description
+#   Wraps the `git clone` command. After a successful clone, it extracts
+#   the repository name from the URL and changes the directory.
+#
+# @usage
+#   gclone <repository_url>
+#
+# @params
+#   $1   The URL of the git repository to clone.
+#
+# @returns
+#   0 - On success.
+#   1 - If the URL is missing or clone fails.
+#
+function gclone() {
+    # --- Input Validation ---
+    if [[ -z "$1" ]]; then
+        print -u2 "Usage: gclone <repository_url>"
+        return 1
+    fi
+
+    # --- Core Logic ---
+    # Perform the clone. If it fails, exit.
+    git clone "$1" || return 1
+    
+    # Extract the directory name from the URL
+    # This works by getting the last part of the path and removing the .git extension
+    local repo_name
+    repo_name=$(basename -s .git "$1")
+
+    if [[ -d "$repo_name" ]]; then
+        cd "$repo_name"
+        print "Cloned and changed directory to: $(pwd)"
+    else
+        print -u2 "Warning: Could not determine directory name from '$1'."
+    fi
+}
+
+#
+# Displays a cheat sheet for a given command.
+#
+# @description
+#   Uses `curl` to fetch a concise cheat sheet from the cheat.sh service
+#   and displays it in your terminal, optionally through a pager like `less`.
+#
+# @usage
+#   cht <command_name>
+#
+# @params
+#   $1   The name of the command you want a cheat sheet for (e.g., git, tar, find).
+#
+# @returns
+#   Returns the status of the `curl` command.
+#
+function cht() {
+    # --- Input Validation ---
+    if [[ -z "$1" ]]; then
+        print -u2 "Usage: cht <command_name>"
+        return 1
+    fi
+    
+    # Use less if available for a scrollable view
+    if command -v less &> /dev/null; then
+        curl "cheat.sh/$1" | less
+    else
+        curl "cheat.sh/$1"
+    fi
+}
+
+#
+# Navigates up the directory tree a specified number of times.
+#
+# @description
+#   A simple wrapper for `cd` that constructs a path with the
+#   appropriate number of "../" segments.
+#
+# @usage
+#   up [levels]
+#
+# @params
+#   $1   (Optional) The number of directories to go up. Defaults to 1.
+#
+# @returns
+#   Returns the status of the `cd` command.
+#
+function up() {
+    local levels="${1:-1}"
+    local path_up=""
+
+    # Build the ../../.. string
+    for ((i=1; i<=levels; i++)); do
+        path_up+="../"
+    done
+    
+    # Perform the cd
+    cd "$path_up"
+}
+
+#
+# Interactively find and change to a directory using fzf.
+#
+# @description
+#   Uses `find` to list all subdirectories and pipes them into the
+#   fuzzy finder `fzf`. The selected directory becomes the new
+#   working directory. This allows for incredibly fast navigation.
+#
+# @usage
+#   fzcd [search_path]
+#
+# @params
+#   $1   (Optional) The root directory to search from. Defaults to the current directory.
+#
+# @returns
+#   0 - On successful directory change.
+#   1 - If fzf is not installed or the selection is cancelled.
+#
+function fzcd() {
+    # --- Dependency Check ---
+    if ! command -v fzf &> /dev/null; then
+        print -u2 "Error: 'fzf' is not installed. Please run 'brew install fzf'."
+        return 1
+    fi
+    
+    local search_root="${1:-.}"
+    
+    # --- Core Logic ---
+    # Find directories (-type d), then pipe to fzf for selection.
+    # The `|| return` part ensures that if you press Esc in fzf, the function exits gracefully.
+    local selected_dir
+    selected_dir=$(find "${search_root}" -type d 2>/dev/null | fzf) || return 1
+
+    if [[ -d "$selected_dir" ]]; then
+        cd "$selected_dir"
+    fi
+}
+
+#
+# Starts a simple HTTP server in the current directory.
+#
+# @description
+#   A wrapper for Python's built-in http.server module. It serves
+#   the files from the current directory on a specified port.
+#
+# @usage
+#   quickserver [port]
+#
+# @params
+#   $1   (Optional) The port to run the server on. Defaults to 8000.
+#
+# @returns
+#   Always returns 0 unless Python is not found.
+#
+function quickserver() {
+    local PORT="${1:-8000}" # Default to port 8000 if not provided
+
+    # --- Input Validation ---
+    if ! command -v python3 &> /dev/null; then
+        print -u2 "Error: python3 is not installed or not in your PATH."
+        return 1
+    fi
+    
+    # --- Core Logic ---
+    print "Starting HTTP server at http://0.0.0.0:$PORT"
+    print "Serving files from: $(pwd)"
+    print "Press Ctrl+C to stop."
+    
+    python3 -m http.server "$PORT"
+    
+    return 0
+}
+
+#
+# Finds and kills the process listening on a given port.
+#
+# @description
+#   A utility to terminate a process based on the network port it is
+#   currently using. It uses `lsof` to find the process ID (PID).
+#
+# @usage
+#   killport <port_number>
+#
+# @params
+#   $1   The TCP/IP port number.
+#
+# @returns
+#   0 - On success.
+#   1 - If port not specified, invalid, or no process is found.
+#
+function killport() {
+    # --- Input Validation ---
+    if [[ -z "$1" ]]; then
+        print -u2 "Usage: killport <port_number>"
+        return 1
+    fi
+
+    # Check if the input is a valid number
+    if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+        print -u2 "Error: Invalid port number '$1'."
+        return 1
+    fi
+
+    # --- Core Logic ---
+    # -t gives terse output (just the PID)
+    local PID
+    PID=$(lsof -t -i:"$1")
+
+    if [[ -z "$PID" ]]; then
+        print "No process found listening on port $1."
+        return 1
+    else
+        print "Killing process with PID $PID on port $1..."
+        # Use kill -9 for forceful termination
+        kill -9 "$PID"
+    fi
+}
+
+#
+# Moves files or directories to the macOS Trash.
+#
+# @description
+#   A safer alternative to `rm`. This function uses AppleScript to
+#   interact with the Finder and move items to the system Trash.
+#
+# @usage
+#   trash <file1> [<file2> ...]
+#
+# @params
+#   $@   One or more paths to files or directories.
+#
+# @returns
+#   0 - On success.
+#   1 - If no files are provided.
+#
+function trash() {
+    # --- Input Validation ---
+    if [[ $# -eq 0 ]]; then
+        print -u2 "Usage: trash <file1> [<file2> ...]"
+        return 1
+    fi
+
+    # --- Core Logic ---
+    for item in "$@"; do
+        if [[ ! -e "$item" ]]; then
+            print -u2 "Warning: '$item' not found. Skipping."
+            continue
+        fi
+        # Get the full, resolved path for AppleScript
+        local full_path
+        full_path=$(greadlink -f "$item" 2>/dev/null || readlink -f "$item" 2>/dev/null || realpath "$item")
+
+        print "Moving '$item' to Trash..."
+        osascript -e "tell application \"Finder\" to move POSIX file \"${full_path}\" to trash"
+    done
+}
+
+#
+# Extracts a wide variety of archive files.
+#
+# @description
+#   A universal extraction function that automatically detects the archive
+#   type based on the file extension and uses the appropriate command.
+#   Supports .zip, .tar.gz, .tgz, .tar.bz2, .tbz, .rar, and more.
+#
+# @usage
+#   extract <archive_file>
+#
+# @params
+#   $1   The path to the archive file to extract.
+#
+# @returns
+#   0 - On success.
+#   1 - If file does not exist or format is unsupported.
+#
+function extract() {
+    local ARCHIVE="$1"
+
+    # --- Input Validation ---
+    if [[ -z "$ARCHIVE" ]]; then
+        print -u2 "Usage: extract <archive_file>"
+        return 1
+    fi
+
+    if [[ ! -f "$ARCHIVE" ]]; then
+        print -u2 "Error: File '$ARCHIVE' not found."
+        return 1
+    fi
+
+    # --- Core Logic ---
+    print "Extracting '$ARCHIVE'..."
+    case "$ARCHIVE" in
+        *.tar.gz|*.tgz)   tar -xzvf "$ARCHIVE" ;;
+        *.tar.bz2|*.tbz)  tar -xjvf "$ARCHIVE" ;;
+        *.tar.xz)         tar -xJvf "$ARCHIVE" ;;
+        *.zip)            unzip "$ARCHIVE"     ;;
+        *.rar)            unrar x "$ARCHIVE"   ;;
+        *)
+            print -u2 "Error: Unsupported file format for '$ARCHIVE'."
+            return 1
+            ;;
+    esac
+}
+
+#
+# Creates a timestamped backup of a file.
+#
+# @description
+#   Makes a copy of a specified file, appending a timestamp in the
+#   format YYYY-MM-DD_HH-MM-SS to the original filename.
+#
+# @usage
+#   backup <file_path>
+#
+# @params
+#   $1   The path to the file to be backed up.
+#
+# @returns
+#   0 - On success.
+#   1 - If arguments are missing or the file does not exist.
+#
+function backup() {
+    local TARGET="$1"
+
+    # --- Input Validation ---
+    if [[ -z "$TARGET" ]]; then
+        print -u2 "Usage: backup <file_path>"
+        return 1
+    fi
+
+    if [[ ! -f "$TARGET" ]]; then
+        print -u2 "Error: File '$TARGET' does not exist."
+        return 1
+    fi
+
+    # --- Core Logic ---
+    local TIMESTAMP
+    TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+    local BACKUP_NAME="${TARGET}.${TIMESTAMP}.bak"
+
+    print "Backing up '$TARGET' to '$BACKUP_NAME'..."
+    cp "$TARGET" "$BACKUP_NAME"
+}
+
+#
+# Creates a new directory and immediately changes into it.
+#
+# @description
+#   A convenient wrapper that combines the `mkdir` and `cd` commands.
+#   It creates a directory (including any parent directories) and then
+#   changes the current shell's working directory to it.
+#
+# @usage
+#   mkcd <directory_path>
+#
+# @params
+#   $1   The path of the directory to create.
+#
+# @returns
+#   0 - On success.
+#   1 - If no directory path is provided.
+#
+function mkcd() {
+    # --- Input Validation ---
+    if [[ -z "$1" ]]; then
+        print -u2 "Usage: mkcd <directory_path>"
+        return 1
+    fi
+
+    # --- Core Logic ---
+    # Create the directory, including parent directories (-p), and on success (&&), change into it.
+    mkdir -p "$1" && cd "$1"
+}
+#
+# Changes into the directory of a given file or directory.
+#
+# @description
+#   If the target is a file, cd into its parent directory.
+#   If the target is a directory, cd into it.
+#
+# @usage
+#   cdf <path>
+#
+# @params
+#   $1   A file or directory path.
+#
+# @returns
+#   0 - On success.
+#   1 - If the path is missing or does not exist.
+#
+function cdf() {
+    if [[ -z "$1" ]]; then
+        print -u2 "Usage: cdf <path>"
+        return 1
+    fi
+
+    local target="$1"
+
+    if [[ -d "$target" ]]; then
+        cd "$target"
+        return $?
+    fi
+
+    if [[ -f "$target" ]]; then
+        local parent
+        parent=$(dirname "$target")
+        cd "$parent"
+        return $?
+    fi
+
+    print -u2 "Error: '$target' does not exist."
+    return 1
+}
+
+#
+# Changes into the root directory of the current git repository.
+#
+# @description
+#   Uses git to detect the top-level directory and cds into it.
+#
+# @usage
+#   groot
+#
+# @returns
+#   0 - On success.
+#   1 - If not inside a git repository.
+#
+function groot() {
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+        print -u2 "Error: Not inside a git repository."
+        return 1
+    }
+    cd "$root"
+}
+
+#
+# Creates a temporary directory and cds into it.
+#
+# @description
+#   Uses mktemp to create a unique directory with an optional prefix.
+#
+# @usage
+#   mktempd [prefix]
+#
+# @params
+#   $1   (Optional) Prefix for the temp directory name. Defaults to "tmp".
+#
+# @returns
+#   0 - On success.
+#   1 - If mktemp fails.
+#
+function mktempd() {
+    local prefix="${1:-tmp}"
+    local dir
+    dir=$(mktemp -d -t "${prefix}.XXXXXX") || return 1
+    print "Created $dir"
+    cd "$dir"
+}
+
+#
+# Prints the PATH entries one per line.
+#
+# @description
+#   Splits the PATH and prints each directory on its own line for readability.
+#
+# @usage
+#   path-show
+#
+function path-show() {
+    print -l ${(s/:/)PATH}
+}
+
+#
+# Adds a directory to PATH if it is not already present.
+#
+# @description
+#   Appends by default. Use --front to prepend for higher priority.
+#
+# @usage
+#   path-add [--front] <directory>
+#
+# @params
+#   --front  Prepend to PATH instead of append.
+#   $1       The directory to add.
+#
+# @returns
+#   0 - On success or if already present.
+#   1 - If input is invalid or directory does not exist.
+#
+function path-add() {
+    local position="append"
+    if [[ "$1" == "--front" ]]; then
+        position="front"
+        shift
+    fi
+
+    if [[ -z "$1" ]]; then
+        print -u2 "Usage: path-add [--front] <directory>"
+        return 1
+    fi
+
+    if [[ ! -d "$1" ]]; then
+        print -u2 "Error: '$1' is not a directory."
+        return 1
+    fi
+
+    local dir="${1:A}"
+    local entries=(${(s/:/)PATH})
+
+    if [[ " ${entries[@]} " == *" $dir "* ]]; then
+        print "PATH already contains $dir"
+        return 0
+    fi
+
+    if [[ "$position" == "front" ]]; then
+        PATH="$dir:$PATH"
+    else
+        PATH="$PATH:$dir"
+    fi
+
+    export PATH
+}
+
+# replace file contents with stdin
+writefile() {
+  [[ -z "$1" ]] && return 1
+  cat > "$1"
+}
+
+# append stdin to file
+appendfile() {
+  [[ -z "$1" ]] && return 1
+  cat >> "$1"
+}

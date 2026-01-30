@@ -1,0 +1,33 @@
+fonestorm() {
+    local _API_USERNAME="$1"
+    local _API_PASSWORD="$2"
+
+    echo $_USERNAME $_PASSWORD
+
+    # API URL and headers
+    local API_URL="https://api.fonestorm.com/v2/auth"
+    local ACCEPT_HEADER="application/json"
+    local CONTENT_TYPE="application/json"
+    
+    # JSON payload
+    local JSON_PAYLOAD=$(jq -n --arg username "$_API_USERNAME" --arg password "$_API_PASSWORD" --argjson expires 86400 \
+        '{username: $username, password: $password, expires: $expires}')
+
+    # Make the request
+    local RESPONSE=$(curl -s -X POST "$API_URL" \
+        -H "Accept: $ACCEPT_HEADER" \
+        -H "Content-Type: $CONTENT_TYPE" \
+        -H "token: $API_AUTH_TOKEN" \
+        -d "$JSON_PAYLOAD")
+
+    # Extract the token from the response
+    local TOKEN=$(echo "$RESPONSE" | jq -r '.auth .token')
+
+    # Check if token is not null or empty
+    if [[ -n "$TOKEN" && "$TOKEN" != "null" ]]; then
+        write_file "$HOME/.fonestorm_token" "export FONESTORM_API_TOKEN=$TOKEN"
+    else
+        echo "Failed to retrieve token. Response: $RESPONSE"
+    fi
+    source "$HOME/.fonestorm_token"
+}
