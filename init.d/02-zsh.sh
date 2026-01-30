@@ -5,6 +5,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
+
 echo "=== ZSH and Oh My Zsh Installation ==="
 
 # Function to install ZSH plugins
@@ -12,7 +15,7 @@ install_zsh_plugin() {
     local plugin_name="$1"
     local plugin_repo="$2"
     local plugins_dir="${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins"
-    
+
     if [ ! -d "${plugins_dir}/${plugin_name}" ]; then
         echo "Installing ${plugin_name}..."
         git clone "${plugin_repo}" "${plugins_dir}/${plugin_name}"
@@ -72,18 +75,82 @@ for plugin in $selected_plugins; do
     esac
 done
 
-# Update .zshrc with selected plugins
-echo "Updating .zshrc with selected plugins..."
-if [ -f ~/.zshrc ]; then
-    # Create backup
-    cp ~/.zshrc ~/.zshrc.backup
-    
-    # Replace plugins line
-    plugin_string=$(echo "$selected_plugins" | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ $//')
-    sed -i "s/plugins=(git)/plugins=($plugin_string)/" ~/.zshrc
-else
-    echo "Warning: .zshrc not found. You may need to configure plugins manually."
+# Install custom theme
+install_custom_theme() {
+    local themes_dir="${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/themes"
+
+    if [ -f "$DOTFILES_DIR/zsh/custom.zsh-theme" ]; then
+        echo "Installing custom ZSH theme..."
+        mkdir -p "$themes_dir"
+        cp "$DOTFILES_DIR/zsh/custom.zsh-theme" "$themes_dir/custom.zsh-theme"
+        echo "✓ Custom theme installed"
+    else
+        echo "Warning: custom.zsh-theme not found in dotfiles."
+    fi
+}
+
+# Install custom .zshrc
+install_zshrc() {
+    echo "Installing .zshrc..."
+
+    # Backup existing .zshrc
+    if [ -f ~/.zshrc ]; then
+        cp ~/.zshrc ~/.zshrc.backup.$(date +%Y%m%d%H%M%S)
+        echo "Backed up existing .zshrc"
+    fi
+
+    # Copy .zshrc from dotfiles
+    if [ -f "$DOTFILES_DIR/zsh/.zshrc" ]; then
+        cp "$DOTFILES_DIR/zsh/.zshrc" ~/.zshrc
+        echo "✓ .zshrc installed from dotfiles"
+    else
+        echo "Creating new .zshrc with selected plugins..."
+        # Create new .zshrc with selected plugins
+        plugin_string=$(echo "$selected_plugins" | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ $//')
+        cat > ~/.zshrc << EOF
+# ZSH Configuration
+export PATH=\$HOME/bin:\$HOME/.local/bin:/usr/local/bin:\$PATH
+
+# Oh My Zsh
+export ZSH="\$HOME/.oh-my-zsh"
+ZSH_THEME="custom"
+
+# Plugins
+plugins=($plugin_string)
+
+# Completions
+fpath+=\${ZSH_CUSTOM:-\${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
+autoload -U compinit && compinit
+
+# Load Oh My Zsh
+source \$ZSH/oh-my-zsh.sh
+
+# Load custom functions
+if [ -d ~/.functions ]; then
+    for file in ~/.functions/*.func; do
+        [ -f "\$file" ] && source "\$file"
+    done
 fi
+
+# Load aliases
+[ -f ~/.aliases ] && source ~/.aliases
+
+# Load environment variables
+[ -f ~/.env ] && source ~/.env
+
+# Load custom paths
+[ -f ~/.paths ] && source ~/.paths
+
+# Editor
+export EDITOR=\${EDITOR:-nvim}
+EOF
+        echo "✓ New .zshrc created"
+    fi
+}
+
+# Install theme and .zshrc
+install_custom_theme
+install_zshrc
 
 echo "✅ ZSH and Oh My Zsh installation completed!"
 echo "ℹ️  Please restart your terminal or run 'zsh' to use the new shell."

@@ -1,0 +1,14 @@
+@import url("css/compact.css");
+@import  url("css/framework.css");
+
+/*
+ * Basic fix for Github dark mode icon visibility issue
+ * Inverts the colors of the Github icon in the toolbar
+ */
+.toolbarbutton-icon[src="page-icon:https://github.com/"] {
+    filter: invert()
+}
+
+.toolbarbutton[image="page-icon:https://github.com/"] {
+    filter: invert()
+}

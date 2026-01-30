@@ -72,6 +72,10 @@ select_components() {
     components=$(gum choose --no-limit \
         "System Update & Base Packages" \
         "ZSH & Oh My Zsh" \
+        "Dotfiles (.functions, .aliases)" \
+        "Neovim" \
+        "Micro Editor" \
+        "Firefox userChrome.css" \
         "Node.js & NVM" \
         "Java & SDKMAN" \
         "Docker" \
@@ -80,7 +84,7 @@ select_components() {
         "WireGuard (VPN)" \
         "Monitoring (Loki & Grafana)" \
         "PM2 (Process Manager)")
-    
+
     echo "$components"
 }
 
@@ -213,6 +217,22 @@ run_component() {
         "PM2 (Process Manager)")
             print_status "Installing PM2..."
             "$INIT_DIR/10-pm2.sh"
+            ;;
+        "Neovim")
+            print_status "Installing Neovim..."
+            "$INIT_DIR/11-nvim.sh"
+            ;;
+        "Dotfiles (.functions, .aliases)")
+            print_status "Installing dotfiles..."
+            "$INIT_DIR/12-dotfiles.sh"
+            ;;
+        "Firefox userChrome.css")
+            print_status "Installing Firefox userChrome.css..."
+            "$INIT_DIR/13-firefox.sh"
+            ;;
+        "Micro Editor")
+            print_status "Installing Micro editor..."
+            "$INIT_DIR/14-micro.sh"
             ;;
         *)
             print_warning "Unknown component: $component"

@@ -22,6 +22,11 @@ sudo apt-get install -y \
     apt-transport-https \
     ca-certificates \
     gnupg \
-    lsb-release
+    lsb-release \
+    fzf \
+    build-essential \
+    cmake \
+    openssh-server \
+    tmux \
 
-echo "✅ System update and base packages installed successfully!"
+echo "✅ System update and base installed successfully!"
