@@ -212,32 +212,19 @@ show_main_menu() {
 }
 
 # Build component list for selection, excluding installed
+# Returns items one per line
 build_available_list() {
-    local available=()
-
     for category in "${CATEGORIES[@]}"; do
-        local has_items=false
-        local category_items=()
-
         for comp in "${COMPONENTS[@]}"; do
             local id=$(echo "$comp" | cut -d'|' -f1)
             local name=$(echo "$comp" | cut -d'|' -f2)
             local cat=$(echo "$comp" | cut -d'|' -f3)
 
             if [[ "$cat" == "$category" ]] && ! is_marked_installed "$id"; then
-                category_items+=("$name")
-                has_items=true
+                echo "[$category] $name"
             fi
         done
-
-        if $has_items; then
-            for item in "${category_items[@]}"; do
-                available+=("[$category] $item")
-            done
-        fi
     done
-
-    printf '%s\n' "${available[@]}"
 }
 
 # Build full component list for reinstall
@@ -370,44 +357,65 @@ run_installation() {
 # =============================================================================
 
 action_install() {
-    local available=$(build_available_list)
+    clear
+    show_header
 
-    if [[ -z "$available" ]]; then
+    # Build available list into a temp file for gum
+    local tmpfile=$(mktemp)
+    build_available_list > "$tmpfile"
+
+    if [[ ! -s "$tmpfile" ]]; then
+        rm -f "$tmpfile"
+        echo ""
         gum style --foreground "#4ECDC4" "All components are already installed!"
-        sleep 2
+        echo ""
+        gum input --placeholder "Press Enter to continue..."
         return
     fi
 
     echo ""
     gum style --foreground "#4ECDC4" "Select components to install:"
-    gum style --foreground "#666666" "(Use space to select, enter to confirm)"
+    gum style --foreground "#888888" "Use SPACE to select, ENTER to confirm, ESC to cancel"
     echo ""
 
-    local selected=$(echo "$available" | gum choose --no-limit)
+    # Use gum choose with the temp file
+    local selected
+    selected=$(cat "$tmpfile" | gum choose --no-limit --height=20)
+    local choose_exit=$?
+    rm -f "$tmpfile"
 
-    if [[ -z "$selected" ]]; then
-        print_warning "No components selected."
+    # Check if user cancelled or selected nothing
+    if [[ $choose_exit -ne 0 ]] || [[ -z "$selected" ]]; then
+        echo ""
+        print_warning "No components selected. Returning to menu."
+        sleep 1
         return
     fi
 
     # Collect configurations for selected components
     declare -A configs
+    echo ""
 
     while IFS= read -r display; do
+        [[ -z "$display" ]] && continue
         local id=$(get_id_from_display "$display")
-        configs["$id"]=$(configure_component "$id")
+        if [[ -n "$id" ]]; then
+            configs["$id"]=$(configure_component "$id")
+        fi
     done <<< "$selected"
 
     # Show summary
     echo ""
     gum style --foreground "#FF6B6B" "Installation Summary:"
     while IFS= read -r display; do
+        [[ -z "$display" ]] && continue
         echo "  • $display"
     done <<< "$selected"
     echo ""
 
     if ! gum confirm "Proceed with installation?"; then
         print_warning "Installation cancelled."
+        sleep 1
         return
     fi
 
@@ -417,13 +425,16 @@ action_install() {
     local failed=0
 
     while IFS= read -r display; do
+        [[ -z "$display" ]] && continue
         local id=$(get_id_from_display "$display")
-        if run_installation "$id" "${configs[$id]}"; then
-            ((success++)) || true
-        else
-            ((failed++)) || true
+        if [[ -n "$id" ]]; then
+            if run_installation "$id" "${configs[$id]}"; then
+                ((success++)) || true
+            else
+                ((failed++)) || true
+            fi
+            echo ""
         fi
-        echo ""
     done <<< "$selected"
 
     # Summary
@@ -438,10 +449,13 @@ action_install() {
         "" \
         "Restart your terminal for changes to take effect"
 
-    sleep 2
+    echo ""
+    gum input --placeholder "Press Enter to continue..."
 }
 
 action_view_installed() {
+    clear
+    show_header
     echo ""
     gum style --foreground "#4ECDC4" "Installed Components:"
     echo ""
@@ -474,50 +488,69 @@ action_view_installed() {
     fi
 
     echo ""
-    gum style --foreground "#666666" "Total: $count components"
+    gum style --foreground "#888888" "Total: $count components"
     echo ""
 
     gum input --placeholder "Press Enter to continue..."
 }
 
 action_reinstall() {
+    clear
+    show_header
     echo ""
     gum style --foreground "#FF8C42" "Select component to reinstall:"
+    gum style --foreground "#888888" "(✓ = currently installed)"
     echo ""
 
-    local selected=$(build_full_list | gum choose)
+    local tmpfile=$(mktemp)
+    build_full_list > "$tmpfile"
 
-    if [[ -z "$selected" ]]; then
+    local selected
+    selected=$(cat "$tmpfile" | gum choose --height=20)
+    local choose_exit=$?
+    rm -f "$tmpfile"
+
+    if [[ $choose_exit -ne 0 ]] || [[ -z "$selected" ]]; then
         return
     fi
 
     local id=$(get_id_from_display "$selected")
     local name=$(get_component_field "$id" 2)
 
+    echo ""
     if gum confirm "Reinstall $name?"; then
         local config=$(configure_component "$id")
+        echo ""
         run_installation "$id" "$config"
+        echo ""
+        gum input --placeholder "Press Enter to continue..."
     fi
-
-    sleep 2
 }
 
 action_reset_state() {
+    clear
+    show_header
     echo ""
-    gum style --foreground "#FF6B6B" "⚠️  This will reset all installation tracking."
-    gum style --foreground "#666666" "Software will not be uninstalled, only the tracking state."
+    gum style --foreground "#FF6B6B" "Warning: Reset Installation State"
+    echo ""
+    gum style --foreground "#888888" "This will clear the tracking of installed components."
+    gum style --foreground "#888888" "Software will NOT be uninstalled."
+    gum style --foreground "#888888" "The installer will re-scan on next run."
     echo ""
 
     if gum confirm "Reset installation state?"; then
         rm -f "$STATE_FILE"
         touch "$STATE_FILE"
+        echo ""
         print_status "Installation state has been reset."
-        print_status "Run the installer again to re-scan installed components."
+        print_status "Components will be re-detected on next run."
     else
+        echo ""
         print_warning "Reset cancelled."
     fi
 
-    sleep 2
+    echo ""
+    gum input --placeholder "Press Enter to continue..."
 }
 
 # =============================================================================
