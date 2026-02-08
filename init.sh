@@ -1,47 +1,182 @@
 #!/bin/bash
 
 # Interactive VPS Setup Script
-# This script uses gum for interactive component selection and installation
+# Modular installer with installation tracking and software detection
 
 set -e
 
-# Script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INIT_DIR="$SCRIPT_DIR/init.d"
+# =============================================================================
+# Configuration
+# =============================================================================
 
-# Colors for output
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALLERS_DIR="$SCRIPT_DIR/installers"
+SETUP_DIR="$SCRIPT_DIR/setup"
+STATE_DIR="$HOME/.config/dotfiles"
+STATE_FILE="$STATE_DIR/installed.state"
+
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+DIM='\033[2m'
+NC='\033[0m'
 
-# Function to print colored output
-print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+# =============================================================================
+# Component Definitions
+# =============================================================================
+
+# Format: ID|Name|Category|Script|Detection Command
+declare -a COMPONENTS=(
+    "system|System Packages|System|installers/01-system.sh|command -v curl && command -v git && command -v fzf"
+    "zsh|ZSH & Oh My Zsh|Shell|installers/02-zsh.sh|test -d ~/.oh-my-zsh"
+    "dotfiles|Dotfiles (.functions, .aliases)|Shell|setup/12-dotfiles.sh|test -d ~/.functions && test -f ~/.aliases"
+    "nodejs|Node.js & NVM|Development|installers/03-nodejs.sh|test -d ~/.nvm"
+    "java|Java & SDKMAN|Development|installers/04-java.sh|test -d ~/.sdkman"
+    "docker|Docker|Containers|installers/05-docker.sh|command -v docker"
+    "redis|Redis|Databases|installers/06-databases.sh|command -v redis-cli"
+    "postgresql|PostgreSQL|Databases|installers/06-databases.sh|command -v psql"
+    "mariadb|MariaDB|Databases|installers/06-databases.sh|command -v mysql"
+    "syncthing|Syncthing|Services|installers/07-syncthing.sh|command -v syncthing"
+    "wireguard|WireGuard VPN|Services|installers/08-wireguard.sh|command -v wg"
+    "loki|Loki (Logs)|Monitoring|installers/09-monitoring.sh|test -f /usr/local/bin/loki"
+    "grafana|Grafana|Monitoring|installers/09-monitoring.sh|command -v grafana-server"
+    "pm2|PM2 Process Manager|Services|installers/10-pm2.sh|command -v pm2"
+    "neovim|Neovim|Editors|installers/11-nvim.sh|command -v nvim"
+    "micro|Micro Editor|Editors|setup/14-micro.sh|command -v micro"
+    "firefox-css|Firefox userChrome.css|Setup|setup/13-firefox.sh|find ~/.mozilla/firefox -name userChrome.css 2>/dev/null | grep -q ."
+)
+
+# Categories for grouping
+declare -a CATEGORIES=(
+    "System"
+    "Shell"
+    "Development"
+    "Containers"
+    "Databases"
+    "Services"
+    "Monitoring"
+    "Editors"
+    "Setup"
+)
+
+# =============================================================================
+# Utility Functions
+# =============================================================================
+
+print_status() { echo -e "${GREEN}[INFO]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_dim() { echo -e "${DIM}$1${NC}"; }
+
+# Initialize state directory and file
+init_state() {
+    mkdir -p "$STATE_DIR"
+    touch "$STATE_FILE"
 }
 
-print_warning() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+# Check if component is marked as installed in state file
+is_marked_installed() {
+    local id="$1"
+    grep -q "^${id}$" "$STATE_FILE" 2>/dev/null
 }
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+# Mark component as installed
+mark_installed() {
+    local id="$1"
+    if ! is_marked_installed "$id"; then
+        echo "$id" >> "$STATE_FILE"
+    fi
 }
 
-# Check if gum is installed
+# Check if component is actually installed on system
+is_detected() {
+    local detection_cmd="$1"
+    eval "$detection_cmd" &>/dev/null
+}
+
+# Get component field by ID
+get_component_field() {
+    local id="$1"
+    local field="$2"  # 1=id, 2=name, 3=category, 4=script, 5=detection
+
+    for comp in "${COMPONENTS[@]}"; do
+        local comp_id=$(echo "$comp" | cut -d'|' -f1)
+        if [[ "$comp_id" == "$id" ]]; then
+            echo "$comp" | cut -d'|' -f"$field"
+            return
+        fi
+    done
+}
+
+# Get all component IDs
+get_all_ids() {
+    for comp in "${COMPONENTS[@]}"; do
+        echo "$comp" | cut -d'|' -f1
+    done
+}
+
+# Get components by category
+get_components_by_category() {
+    local category="$1"
+    for comp in "${COMPONENTS[@]}"; do
+        local comp_cat=$(echo "$comp" | cut -d'|' -f3)
+        if [[ "$comp_cat" == "$category" ]]; then
+            echo "$comp" | cut -d'|' -f1
+        fi
+    done
+}
+
+# =============================================================================
+# Installation Detection
+# =============================================================================
+
+# Scan system for installed components
+scan_installed() {
+    print_status "Scanning for installed components..."
+
+    local detected=0
+    local total=${#COMPONENTS[@]}
+
+    for comp in "${COMPONENTS[@]}"; do
+        local id=$(echo "$comp" | cut -d'|' -f1)
+        local name=$(echo "$comp" | cut -d'|' -f2)
+        local detection=$(echo "$comp" | cut -d'|' -f5)
+
+        if is_detected "$detection"; then
+            if ! is_marked_installed "$id"; then
+                mark_installed "$id"
+                print_dim "  Detected: $name"
+            fi
+            ((detected++)) || true
+        fi
+    done
+
+    echo ""
+    print_status "Found $detected/$total components already installed"
+}
+
+# =============================================================================
+# Gum Installation
+# =============================================================================
+
 check_gum() {
-    if ! command -v gum &> /dev/null; then
+    if ! command -v gum &>/dev/null; then
         print_warning "gum is not installed. Installing gum..."
-        
-        # Install gum based on the system
-        if command -v apt-get &> /dev/null; then
+
+        if command -v apt-get &>/dev/null; then
             sudo mkdir -p /etc/apt/keyrings
             curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
             echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
             sudo apt-get update && sudo apt-get install -y gum
-        elif command -v brew &> /dev/null; then
+        elif command -v brew &>/dev/null; then
             brew install gum
+        elif command -v dnf &>/dev/null; then
+            sudo dnf install -y gum
+        elif command -v pacman &>/dev/null; then
+            sudo pacman -S --noconfirm gum
         else
             print_error "Could not install gum. Please install it manually."
             exit 1
@@ -49,14 +184,11 @@ check_gum() {
     fi
 }
 
-# Make scripts executable
-make_scripts_executable() {
-    print_status "Making scripts executable..."
-    find "$INIT_DIR" -name "*.sh" -exec chmod +x {} \;
-}
+# =============================================================================
+# Menu Functions
+# =============================================================================
 
-# Component selection functions
-select_components() {
+show_header() {
     gum style \
         --foreground "#FF6B6B" \
         --border-foreground "#FF6B6B" \
@@ -64,289 +196,376 @@ select_components() {
         --align center \
         --width 60 \
         --margin "1 2" \
-        --padding "2 4" \
-        "🚀 Interactive VPS Setup" \
-        "Select the components you want to install"
-
-    local components
-    components=$(gum choose --no-limit \
-        "System Update & Base Packages" \
-        "ZSH & Oh My Zsh" \
-        "Dotfiles (.functions, .aliases)" \
-        "Neovim" \
-        "Micro Editor" \
-        "Firefox userChrome.css" \
-        "Node.js & NVM" \
-        "Java & SDKMAN" \
-        "Docker" \
-        "Databases (Redis, PostgreSQL, MariaDB)" \
-        "Syncthing (File Sync)" \
-        "WireGuard (VPN)" \
-        "Monitoring (Loki & Grafana)" \
-        "PM2 (Process Manager)")
-
-    echo "$components"
+        --padding "1 4" \
+        "Interactive VPS Setup" \
+        "Modular Installation System"
 }
 
-# ZSH plugin selection
-select_zsh_plugins() {
-    gum style --foreground "#4ECDC4" "Select ZSH plugins to install:"
-    
-    local plugins
-    plugins=$(gum choose --no-limit \
-        "git" \
-        "zsh-syntax-highlighting" \
-        "zsh-autosuggestions" \
-        "zsh-completions" \
-        "zsh-history-substring-search" \
-        "fast-syntax-highlighting" \
-        "nvm" \
-        "sdk" \
-        "docker" \
-        "command-not-found" \
-        "sudo" \
-        "pip")
-    
-    echo "$plugins"
-}
-
-# Database selection
-select_databases() {
-    gum style --foreground "#FFD93D" "Select databases to install:"
-    
-    local databases
-    databases=$(gum choose --no-limit \
-        "redis" \
-        "postgresql" \
-        "mariadb")
-    
-    echo "$databases"
-}
-
-# Node.js version selection
-select_node_version() {
-    gum style --foreground "#6BCF7F" "Select Node.js version:"
-    
+show_main_menu() {
+    echo ""
     gum choose \
-        "18" \
-        "20" \
-        "21" \
-        "22"
+        "Install Components" \
+        "View Installed" \
+        "Reinstall Component" \
+        "Reset Installation State" \
+        "Exit"
 }
 
-# Java version selection
-select_java_version() {
-    gum style --foreground "#4D96FF" "Select Java version:"
-    
-    gum choose \
-        "8" \
-        "11" \
-        "17" \
-        "21"
+# Build component list for selection, excluding installed
+build_available_list() {
+    local available=()
+
+    for category in "${CATEGORIES[@]}"; do
+        local has_items=false
+        local category_items=()
+
+        for comp in "${COMPONENTS[@]}"; do
+            local id=$(echo "$comp" | cut -d'|' -f1)
+            local name=$(echo "$comp" | cut -d'|' -f2)
+            local cat=$(echo "$comp" | cut -d'|' -f3)
+
+            if [[ "$cat" == "$category" ]] && ! is_marked_installed "$id"; then
+                category_items+=("$name")
+                has_items=true
+            fi
+        done
+
+        if $has_items; then
+            for item in "${category_items[@]}"; do
+                available+=("[$category] $item")
+            done
+        fi
+    done
+
+    printf '%s\n' "${available[@]}"
 }
 
-# Get database credentials
-get_database_credentials() {
-    gum style --foreground "#FFD93D" "Enter database credentials:"
-    
-    local db_user
-    local db_pass
-    
-    db_user=$(gum input --placeholder "Database username" --value "$USER")
-    db_pass=$(gum input --password --placeholder "Database password")
-    
-    echo "$db_user $db_pass"
+# Build full component list for reinstall
+build_full_list() {
+    for category in "${CATEGORIES[@]}"; do
+        for comp in "${COMPONENTS[@]}"; do
+            local id=$(echo "$comp" | cut -d'|' -f1)
+            local name=$(echo "$comp" | cut -d'|' -f2)
+            local cat=$(echo "$comp" | cut -d'|' -f3)
+
+            if [[ "$cat" == "$category" ]]; then
+                local status=""
+                if is_marked_installed "$id"; then
+                    status=" ✓"
+                fi
+                echo "[$category] $name$status"
+            fi
+        done
+    done
 }
 
-# Get Syncthing credentials
-get_syncthing_credentials() {
-    gum style --foreground "#FF8C42" "Enter Syncthing credentials:"
-    
-    local sync_user
-    local sync_pass
-    
-    sync_user=$(gum input --placeholder "Syncthing username" --value "$USER")
-    sync_pass=$(gum input --password --placeholder "Syncthing password")
-    
-    echo "$sync_user $sync_pass"
+# Get component ID from display name
+get_id_from_display() {
+    local display="$1"
+    # Remove category prefix and status suffix
+    local name=$(echo "$display" | sed 's/^\[[^]]*\] //' | sed 's/ ✓$//')
+
+    for comp in "${COMPONENTS[@]}"; do
+        local comp_name=$(echo "$comp" | cut -d'|' -f2)
+        if [[ "$comp_name" == "$name" ]]; then
+            echo "$comp" | cut -d'|' -f1
+            return
+        fi
+    done
 }
 
-# Execute component installations
-run_component() {
-    local component="$1"
-    shift
-    local args="$@"
-    
-    case "$component" in
-        "System Update & Base Packages")
-            print_status "Running system update..."
-            "$INIT_DIR/01-system.sh"
+# =============================================================================
+# Component Configuration
+# =============================================================================
+
+configure_component() {
+    local id="$1"
+    local config=""
+
+    case "$id" in
+        zsh)
+            if gum confirm "Configure ZSH plugins?"; then
+                config=$(gum choose --no-limit \
+                    "git" \
+                    "zsh-syntax-highlighting" \
+                    "zsh-autosuggestions" \
+                    "zsh-completions" \
+                    "zsh-history-substring-search" \
+                    "fast-syntax-highlighting" \
+                    "nvm" \
+                    "sdk" \
+                    "docker" \
+                    "command-not-found" \
+                    "sudo" \
+                    "pip" | tr '\n' ' ')
+            fi
             ;;
-        "ZSH & Oh My Zsh")
-            print_status "Installing ZSH with selected plugins..."
-            "$INIT_DIR/02-zsh.sh" $args
+        nodejs)
+            gum style --foreground "#6BCF7F" "Select Node.js version:"
+            config=$(gum choose "18" "20" "21" "22")
             ;;
-        "Node.js & NVM")
-            print_status "Installing Node.js version $args..."
-            "$INIT_DIR/03-nodejs.sh" $args
+        java)
+            gum style --foreground "#4D96FF" "Select Java version:"
+            config=$(gum choose "8" "11" "17" "21")
             ;;
-        "Java & SDKMAN")
-            print_status "Installing Java version $args..."
-            "$INIT_DIR/04-java.sh" $args
+        redis|postgresql|mariadb)
+            gum style --foreground "#FFD93D" "Database credentials:"
+            local db_user=$(gum input --placeholder "Username" --value "$USER")
+            local db_pass=$(gum input --password --placeholder "Password")
+            config="$db_user $db_pass $id"
             ;;
-        "Docker")
-            print_status "Installing Docker..."
-            "$INIT_DIR/05-docker.sh"
+        syncthing)
+            gum style --foreground "#FF8C42" "Syncthing credentials:"
+            local sync_user=$(gum input --placeholder "Username" --value "$USER")
+            local sync_pass=$(gum input --password --placeholder "Password")
+            config="$sync_user $sync_pass"
             ;;
-        "Databases (Redis, PostgreSQL, MariaDB)")
-            print_status "Installing selected databases..."
-            "$INIT_DIR/06-databases.sh" $args
-            ;;
-        "Syncthing (File Sync)")
-            print_status "Installing Syncthing..."
-            "$INIT_DIR/07-syncthing.sh" $args
-            ;;
-        "WireGuard (VPN)")
-            print_status "Installing WireGuard..."
-            "$INIT_DIR/08-wireguard.sh"
-            ;;
-        "Monitoring (Loki & Grafana)")
-            print_status "Installing monitoring stack..."
-            "$INIT_DIR/09-monitoring.sh"
-            ;;
-        "PM2 (Process Manager)")
-            print_status "Installing PM2..."
-            "$INIT_DIR/10-pm2.sh"
-            ;;
-        "Neovim")
-            print_status "Installing Neovim..."
-            "$INIT_DIR/11-nvim.sh"
-            ;;
-        "Dotfiles (.functions, .aliases)")
-            print_status "Installing dotfiles..."
-            "$INIT_DIR/12-dotfiles.sh"
-            ;;
-        "Firefox userChrome.css")
-            print_status "Installing Firefox userChrome.css..."
-            "$INIT_DIR/13-firefox.sh"
-            ;;
-        "Micro Editor")
-            print_status "Installing Micro editor..."
-            "$INIT_DIR/14-micro.sh"
-            ;;
-        *)
-            print_warning "Unknown component: $component"
+        neovim)
+            gum style --foreground "#88C0D0" "Select Neovim configuration:"
+            config=$(gum choose "minimal" "nvchad")
             ;;
     esac
+
+    echo "$config"
 }
 
-# Main execution
-main() {
-    # Check requirements
-    check_gum
-    make_scripts_executable
-    
-    # Component selection
-    local selected_components
-    selected_components=$(select_components)
-    
-    if [ -z "$selected_components" ]; then
-        print_warning "No components selected. Exiting."
-        exit 0
+# =============================================================================
+# Installation Execution
+# =============================================================================
+
+run_installation() {
+    local id="$1"
+    local config="$2"
+
+    local name=$(get_component_field "$id" 2)
+    local script=$(get_component_field "$id" 4)
+    local script_path="$SCRIPT_DIR/$script"
+
+    print_status "Installing $name..."
+
+    # Make script executable
+    chmod +x "$script_path"
+
+    # Run installation
+    if [[ -n "$config" ]]; then
+        "$script_path" $config
+    else
+        "$script_path"
     fi
-    
-    # Store component-specific configurations
-    local zsh_plugins=""
-    local node_version=""
-    local java_version=""
-    local databases=""
-    local db_credentials=""
-    local sync_credentials=""
-    
-    # Get configuration for selected components
-    while IFS= read -r component; do
-        case "$component" in
-            "ZSH & Oh My Zsh")
-                if gum confirm "Configure ZSH plugins?"; then
-                    zsh_plugins=$(select_zsh_plugins)
-                fi
-                ;;
-            "Node.js & NVM")
-                node_version=$(select_node_version)
-                ;;
-            "Java & SDKMAN")
-                java_version=$(select_java_version)
-                ;;
-            "Databases (Redis, PostgreSQL, MariaDB)")
-                databases=$(select_databases)
-                if [ -n "$databases" ]; then
-                    db_credentials=$(get_database_credentials)
-                fi
-                ;;
-            "Syncthing (File Sync)")
-                sync_credentials=$(get_syncthing_credentials)
-                ;;
-        esac
-    done <<< "$selected_components"
-    
-    # Confirmation
+
+    local exit_code=$?
+
+    if [[ $exit_code -eq 0 ]]; then
+        mark_installed "$id"
+        print_status "✅ $name installed successfully!"
+        return 0
+    else
+        print_error "❌ Failed to install $name"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Menu Actions
+# =============================================================================
+
+action_install() {
+    local available=$(build_available_list)
+
+    if [[ -z "$available" ]]; then
+        gum style --foreground "#4ECDC4" "All components are already installed!"
+        sleep 2
+        return
+    fi
+
+    echo ""
+    gum style --foreground "#4ECDC4" "Select components to install:"
+    gum style --foreground "#666666" "(Use space to select, enter to confirm)"
+    echo ""
+
+    local selected=$(echo "$available" | gum choose --no-limit)
+
+    if [[ -z "$selected" ]]; then
+        print_warning "No components selected."
+        return
+    fi
+
+    # Collect configurations for selected components
+    declare -A configs
+
+    while IFS= read -r display; do
+        local id=$(get_id_from_display "$display")
+        configs["$id"]=$(configure_component "$id")
+    done <<< "$selected"
+
+    # Show summary
+    echo ""
     gum style --foreground "#FF6B6B" "Installation Summary:"
-    echo "$selected_components" | while IFS= read -r component; do
-        echo "  ✓ $component"
-    done
-    
+    while IFS= read -r display; do
+        echo "  • $display"
+    done <<< "$selected"
+    echo ""
+
     if ! gum confirm "Proceed with installation?"; then
         print_warning "Installation cancelled."
-        exit 0
+        return
     fi
-    
+
     # Execute installations
-    print_status "Starting component installations..."
-    
-    while IFS= read -r component; do
-        case "$component" in
-            "ZSH & Oh My Zsh")
-                run_component "$component" "$zsh_plugins"
-                ;;
-            "Node.js & NVM")
-                run_component "$component" "$node_version"
-                ;;
-            "Java & SDKMAN")
-                run_component "$component" "$java_version"
-                ;;
-            "Databases (Redis, PostgreSQL, MariaDB)")
-                run_component "$component" "$db_credentials" "$databases"
-                ;;
-            "Syncthing (File Sync)")
-                run_component "$component" "$sync_credentials"
-                ;;
-            *)
-                run_component "$component"
-                ;;
-        esac
-        
-        if [ $? -eq 0 ]; then
-            print_status "✅ $component installed successfully!"
+    echo ""
+    local success=0
+    local failed=0
+
+    while IFS= read -r display; do
+        local id=$(get_id_from_display "$display")
+        if run_installation "$id" "${configs[$id]}"; then
+            ((success++)) || true
         else
-            print_error "❌ Failed to install $component"
+            ((failed++)) || true
         fi
-    done <<< "$selected_components"
-    
-    # Final message
+        echo ""
+    done <<< "$selected"
+
+    # Summary
+    echo ""
     gum style \
         --foreground "#4ECDC4" \
         --border-foreground "#4ECDC4" \
-        --border double \
-        --align center \
-        --width 60 \
-        --margin "1 2" \
-        --padding "2 4" \
-        "🎉 Installation Complete!" \
-        "Your VPS setup is ready!" \
+        --border rounded \
+        --padding "1 2" \
+        "Installation Complete" \
+        "Successful: $success | Failed: $failed" \
         "" \
-        "Please restart your terminal or re-login" \
-        "to ensure all changes take effect."
+        "Restart your terminal for changes to take effect"
+
+    sleep 2
 }
 
-# Run main function
-main "$@"
+action_view_installed() {
+    echo ""
+    gum style --foreground "#4ECDC4" "Installed Components:"
+    echo ""
+
+    local count=0
+    for category in "${CATEGORIES[@]}"; do
+        local has_installed=false
+        local items=""
+
+        for comp in "${COMPONENTS[@]}"; do
+            local id=$(echo "$comp" | cut -d'|' -f1)
+            local name=$(echo "$comp" | cut -d'|' -f2)
+            local cat=$(echo "$comp" | cut -d'|' -f3)
+
+            if [[ "$cat" == "$category" ]] && is_marked_installed "$id"; then
+                items+="    ✓ $name\n"
+                has_installed=true
+                ((count++)) || true
+            fi
+        done
+
+        if $has_installed; then
+            gum style --foreground "#FFD93D" "  $category:"
+            echo -e "$items"
+        fi
+    done
+
+    if [[ $count -eq 0 ]]; then
+        print_dim "  No components installed yet."
+    fi
+
+    echo ""
+    gum style --foreground "#666666" "Total: $count components"
+    echo ""
+
+    gum input --placeholder "Press Enter to continue..."
+}
+
+action_reinstall() {
+    echo ""
+    gum style --foreground "#FF8C42" "Select component to reinstall:"
+    echo ""
+
+    local selected=$(build_full_list | gum choose)
+
+    if [[ -z "$selected" ]]; then
+        return
+    fi
+
+    local id=$(get_id_from_display "$selected")
+    local name=$(get_component_field "$id" 2)
+
+    if gum confirm "Reinstall $name?"; then
+        local config=$(configure_component "$id")
+        run_installation "$id" "$config"
+    fi
+
+    sleep 2
+}
+
+action_reset_state() {
+    echo ""
+    gum style --foreground "#FF6B6B" "⚠️  This will reset all installation tracking."
+    gum style --foreground "#666666" "Software will not be uninstalled, only the tracking state."
+    echo ""
+
+    if gum confirm "Reset installation state?"; then
+        rm -f "$STATE_FILE"
+        touch "$STATE_FILE"
+        print_status "Installation state has been reset."
+        print_status "Run the installer again to re-scan installed components."
+    else
+        print_warning "Reset cancelled."
+    fi
+
+    sleep 2
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+main() {
+    # Initialize
+    init_state
+    check_gum
+
+    # Make scripts executable
+    find "$INSTALLERS_DIR" -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+    find "$SETUP_DIR" -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+
+    # Scan for already installed components
+    scan_installed
+
+    # Main menu loop
+    while true; do
+        clear
+        show_header
+
+        local choice=$(show_main_menu)
+
+        case "$choice" in
+            "Install Components")
+                action_install
+                ;;
+            "View Installed")
+                action_view_installed
+                ;;
+            "Reinstall Component")
+                action_reinstall
+                ;;
+            "Reset Installation State")
+                action_reset_state
+                ;;
+            "Exit"|"")
+                echo ""
+                gum style --foreground "#4ECDC4" "Goodbye! 👋"
+                exit 0
+                ;;
+        esac
+    done
+}
+
+# Run if executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

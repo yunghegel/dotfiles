@@ -3,8 +3,7 @@
 # 03-nodejs.sh - NVM and Node.js installation with version selection
 # This script installs NVM and a selected version of Node.js
 
-set -e
-
+set -emmmmmmm jjjjjjjjbbbbbbbbb````221
 echo "=== NVM and Node.js Installation ==="
 
 # Get Node.js version (default to 20 if not provided)
