@@ -202,7 +202,7 @@ show_header() {
 }
 
 show_main_menu() {
-    echo ""
+    echo "" >&2
     gum choose \
         "Install Components" \
         "View Installed" \
