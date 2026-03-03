@@ -1,20 +1,14 @@
 #!/bin/bash
 
 # 11-nvim.sh - Neovim installation and configuration
-# This script installs Neovim and sets up the custom configuration
-#
-# Usage: ./11-nvim.sh [config_type]
-#   config_type: "minimal" (default) - uses nvim/init.lua (Lazy.nvim standalone)
-#                "nvchad" - uses nvim-config/ (NvChad-based)
+# This script installs Neovim and sets up a lightweight configuration
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
-CONFIG_TYPE="${1:-minimal}"
 
 echo "=== Neovim Installation ==="
-echo "Configuration: $CONFIG_TYPE"
 
 # Install Neovim
 install_neovim() {
@@ -26,22 +20,11 @@ install_neovim() {
 
     echo "Installing Neovim..."
 
-    if command -v apt-get &> /dev/null; then
-        sudo add-apt-repository -y ppa:neovim-ppa/stable 2>/dev/null || true
-        sudo apt-get update
-        sudo apt-get install -y neovim
-    elif command -v brew &> /dev/null; then
-        brew install neovim
-    elif command -v dnf &> /dev/null; then
-        sudo dnf install -y neovim
-    elif command -v pacman &> /dev/null; then
-        sudo pacman -S --noconfirm neovim
-    else
-        echo "Downloading Neovim AppImage..."
-        curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-        chmod u+x nvim.appimage
-        sudo mv nvim.appimage /usr/local/bin/nvim
-    fi
+    echo "Downloading Neovim AppImage..."
+    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+    chmod u+x nvim.appimage
+    sudo mv nvim.appimage /usr/local/bin/nvim
+
 }
 
 # Install dependencies for plugins
@@ -82,9 +65,9 @@ install_dependencies() {
     fi
 }
 
-# Setup minimal configuration (nvim/init.lua)
-setup_minimal_config() {
-    echo "Setting up minimal Neovim configuration..."
+# Setup lightweight configuration
+setup_config() {
+    echo "Setting up lightweight Neovim configuration..."
 
     local nvim_config_dir="$HOME/.config/nvim"
 
@@ -94,65 +77,30 @@ setup_minimal_config() {
         mv "$nvim_config_dir" "$nvim_config_dir.backup.$(date +%Y%m%d%H%M%S)"
     fi
 
-    # Create config directory and copy init.lua
+    # Create config directory and copy init.lua + colors
     mkdir -p "$nvim_config_dir"
 
     if [ -f "$DOTFILES_DIR/nvim/init.lua" ]; then
         echo "Copying init.lua configuration..."
         cp "$DOTFILES_DIR/nvim/init.lua" "$nvim_config_dir/init.lua"
+
+        if [ -d "$DOTFILES_DIR/nvim/colors" ]; then
+            cp -r "$DOTFILES_DIR/nvim/colors" "$nvim_config_dir"
+            echo "Config copied to $nvim_config_dir/"
+        else
+            echo "Warning: nvim/colors directory not found."
+            echo "Config copied to $nvim_config_dir/init.lua"
+        fi
     else
         echo "Error: nvim/init.lua not found in dotfiles."
         exit 1
     fi
 }
 
-# Setup NvChad configuration
-setup_nvchad_config() {
-    echo "Setting up NvChad-based Neovim configuration..."
-
-    local nvim_config_dir="$HOME/.config/nvim"
-    local nvchad_dir="$HOME/.local/share/nvchad"
-
-    # Backup existing config if present
-    if [ -d "$nvim_config_dir" ]; then
-        echo "Backing up existing Neovim config..."
-        mv "$nvim_config_dir" "$nvim_config_dir.backup.$(date +%Y%m%d%H%M%S)"
-    fi
-
-    mkdir -p "$HOME/.config"
-
-    if [ -d "$DOTFILES_DIR/nvim-config/nvim" ]; then
-        echo "Copying Neovim configuration..."
-        cp -r "$DOTFILES_DIR/nvim-config/nvim" "$nvim_config_dir"
-    else
-        echo "Warning: nvim-config/nvim directory not found in dotfiles."
-        mkdir -p "$nvim_config_dir"
-    fi
-
-    if [ -d "$DOTFILES_DIR/nvim-config/nvchad" ]; then
-        echo "Copying NvChad base..."
-        mkdir -p "$nvchad_dir"
-        cp -r "$DOTFILES_DIR/nvim-config/nvchad"/* "$nvchad_dir/"
-    fi
-}
-
 # Main execution
 install_neovim
 install_dependencies
-
-case "$CONFIG_TYPE" in
-    minimal|simple|lazy)
-        setup_minimal_config
-        ;;
-    nvchad|full)
-        setup_nvchad_config
-        ;;
-    *)
-        echo "Unknown config type: $CONFIG_TYPE"
-        echo "Using minimal configuration."
-        setup_minimal_config
-        ;;
-esac
+setup_config
 
 echo ""
 echo "Neovim installation completed!"
@@ -161,5 +109,3 @@ echo "Next steps:"
 echo "  1. Run 'nvim' to launch Neovim"
 echo "  2. Wait for plugins to install automatically on first launch"
 echo "  3. Run ':checkhealth' to verify everything is working"
-echo ""
-echo "See docs/NEOVIM.md for a complete usage guide."

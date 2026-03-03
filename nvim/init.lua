@@ -40,11 +40,11 @@ require("lazy").setup({
     "github/copilot.vim",
     config = function()
       vim.g.copilot_no_tab_map = true  -- keep Tab free for nvim-cmp
-
+  
       -- Accept / dismiss suggestions
       vim.api.nvim_set_keymap("i", "<C-J>", 'copilot#Accept("\\<CR>")', { expr = true, silent = true })
       vim.api.nvim_set_keymap("i", "<C-K>", 'copilot#Dismiss()', { expr = true, silent = true })
-
+  
       -- Enable for all filetypes
       vim.g.copilot_filetypes = { ["*"] = true }
     end
@@ -123,7 +123,11 @@ require("lazy").setup({
         snippet = { expand = function(args) luasnip.lsp_expand(args.body) end },
         mapping = cmp.mapping.preset.insert({
           ["<Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then cmp.select_next_item()
+            -- Copilot takes precedence
+            local copilot_suggestion = vim.fn["copilot#GetDisplayedSuggestion"]()
+            if copilot_suggestion.text ~= "" then
+              vim.api.nvim_feedkeys(vim.fn["copilot#Accept"](""), "n", true)
+            elseif cmp.visible() then cmp.select_next_item()
             elseif luasnip.expand_or_jumpable() then luasnip.expand_or_jump()
             else fallback() end
           end, { "i", "s" }),
@@ -176,7 +180,30 @@ require("lazy").setup({
     "nvim-lualine/lualine.nvim",
     dependencies = { "nvim-tree/nvim-web-devicons" },
     config = function()
-      require("lualine").setup({ options = { theme = "auto", section_separators = "", component_separators = "|" } })
+      require("lualine").setup({
+        options = {
+          theme = "auto",
+          section_separators = "",
+          component_separators = "|",
+          globalstatus = true,
+        },
+        sections = {
+          lualine_a = { "mode" },
+          lualine_b = { "branch", "diff" },
+          lualine_c = { { "filename", path = 1 } },
+          lualine_x = { "diagnostics", "encoding", "filetype" },
+          lualine_y = { "progress" },
+          lualine_z = { "location" },
+        },
+        inactive_sections = {
+          lualine_a = {},
+          lualine_b = {},
+          lualine_c = { { "filename", path = 1 } },
+          lualine_x = { "location" },
+          lualine_y = {},
+          lualine_z = {},
+        },
+      })
     end,
   },
   {
@@ -195,13 +222,23 @@ require("lazy").setup({
   {
     "akinsho/toggleterm.nvim",
     config = function()
-      require("toggleterm").setup({ size = 15, open_mapping = [[<C-\>]], direction = "horizontal" })
+      require("toggleterm").setup({
+        size = 15,
+        open_mapping = [[<C-\>]],
+        direction = "horizontal",
+        shade_terminals = false,
+        highlights = {
+          Normal = { link = "Normal" },
+          NormalFloat = { link = "NormalFloat" },
+          FloatBorder = { link = "FloatBorder" },
+        },
+      })
     end,
   },
   "tpope/vim-commentary",
   "tpope/vim-surround",
   "windwp/nvim-autopairs",
-  "ggandor/leap.nvim",
+  { url = "https://codeberg.org/andyg/leap.nvim" },
   "folke/which-key.nvim",
 
   -- Markdown
@@ -226,4 +263,59 @@ require("lazy").setup({
   -- Colorschemes
   "EdenEast/nightfox.nvim",
   "sainnhe/everforest",
+},
+
+{
+'MeanderingProgrammer/render-markdown.nvim',
+    -- :dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-mini/mini.nvim' },            -- if you use the mini.nvim suite
+    -- dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-mini/mini.icons' },        -- if you use standalone mini plugins
+    dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-tree/nvim-web-devicons' }, -- if you prefer nvim-web-devicons
+    ---@module 'render-markdown'
+    ---@type render.md.UserConfig
+    opts = {}, 
+}
+
+)
+
+-- Clean up terminal buffers
+vim.api.nvim_create_autocmd("TermOpen", {
+  callback = function()
+    vim.opt_local.number = false
+    vim.opt_local.relativenumber = false
+    vim.opt_local.signcolumn = "no"
+    vim.opt_local.scrolloff = 0
+  end,
 })
+
+vim.cmd('colorscheme salient')
+
+-- ===============================
+-- Save with Ctrl+S
+-- ===============================
+vim.keymap.set({'n','i'}, '<C-s>', function()
+  vim.cmd('update')  -- saves only if modified
+end, { noremap = true, silent = true })
+
+-- ===============================
+-- Quit with Ctrl+Q (with warning)
+-- ===============================
+vim.keymap.set({'n','i'}, '<C-q>', function()
+  if vim.bo.modified then
+    -- model warning with options
+    local choice = vim.fn.input("⚠️ Unsaved changes! [s]ave & quit, [q]uit anyway, [c]ancel: ")
+    choice = choice:lower()
+    if choice == 's' then
+      vim.cmd('update')  -- save changes
+      vim.cmd('q')       -- quit
+    elseif choice == 'q' then
+      vim.cmd('q!')      -- quit without saving
+    else
+      print("Quit canceled.")
+    end
+  else
+    vim.cmd('q')         -- no unsaved changes, quit normally
+  end
+end, { noremap = true, silent = true }) 
+
+
+

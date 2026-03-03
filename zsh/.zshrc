@@ -77,3 +77,5 @@ SAVEHIST=10000
 setopt HIST_IGNORE_DUPS
 setopt HIST_IGNORE_SPACE
 setopt SHARE_HISTORY
+# refresh shell plugin
+source $OH_MY_ZSH/custom/refresh.zsh

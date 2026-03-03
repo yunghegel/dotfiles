@@ -43,6 +43,8 @@ fi
 # Set ZSH_CUSTOM directory
 export ZSH_CUSTOM=${ZSH_CUSTOM:-~/.oh-my-zsh/custom}
 
+cp -r $DOTFILES_DIR/zsh/refresh.zsh $ZSH_CUSTOM
+
 # Parse selected plugins (passed as arguments)
 selected_plugins="$@"
 if [ -z "$selected_plugins" ]; then
@@ -143,6 +145,10 @@ fi
 
 # Editor
 export EDITOR=\${EDITOR:-nvim}
+
+# refresh shell plugin
+source $OH_MY_ZSH/custom/refresh.zsh
+
 EOF
         echo "✓ New .zshrc created"
     fi
