@@ -1,0 +1,69 @@
+# Hardware / firmware (Beelink SER3, Ryzen 3 3200U + Vega 3)
+amd64-microcode
+linux-firmware
+mesa-va-drivers
+vainfo
+lm-sensors
+smartmontools
+nvme-cli
+hdparm
+powertop
+
+# Remote access
+openssh-server
+wireguard
+wireguard-tools
+qrencode
+avahi-daemon
+wakeonlan
+
+# Security & maintenance
+ufw
+fail2ban
+unattended-upgrades
+needrestart
+apparmor-utils
+
+# Storage & filesystems
+parted
+gdisk
+ntfs-3g
+exfatprogs
+dosfstools
+mergerfs
+lvm2
+
+# File sharing
+samba
+cifs-utils
+nfs-kernel-server
+nfs-common
+
+# Backup & sync
+syncthing
+restic
+borgbackup
+rclone
+
+# Networking diagnostics
+iproute2
+net-tools
+dnsutils
+iputils-ping
+traceroute
+mtr-tiny
+nmap
+iperf3
+tcpdump
+ethtool
+iftop
+nethogs
+
+# Monitoring
+sysstat
+iotop-c
+glances
+logrotate
+
+# Web admin (optional)
+cockpit

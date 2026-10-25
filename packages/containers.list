@@ -1,0 +1,14 @@
+# service | image | purpose
+adguardhome   | adguard/adguardhome:latest                 | network-wide ad blocking + DNS
+pihole        | pihole/pihole:latest                       | alt ad blocker (pick one)
+caddy         | caddy:latest                               | reverse proxy + auto TLS
+portainer     | portainer/portainer-ce:latest              | container management UI
+homepage      | ghcr.io/gethomepage/homepage:latest        | dashboard
+uptime-kuma   | louislam/uptime-kuma:latest                | service uptime monitoring
+filebrowser   | filebrowser/filebrowser:latest             | web file manager
+jellyfin      | jellyfin/jellyfin:latest                   | media server (VA-API on Vega 3)
+vaultwarden   | vaultwarden/server:latest                  | password manager
+immich        | ghcr.io/immich-app/immich-server:release   | photo backup
+nextcloud     | nextcloud:latest                           | files/calendar/contacts
+watchtower    | containrrr/watchtower:latest               | auto-update containers
+dozzle        | amir20/dozzle:latest                       | container log viewer

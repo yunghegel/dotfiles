@@ -1,0 +1,15 @@
+# name | source | installer
+docker-ce                | download.docker.com apt repo      | installers/05-docker.sh
+docker-ce-cli            | download.docker.com apt repo      | installers/05-docker.sh
+containerd.io            | download.docker.com apt repo      | installers/05-docker.sh
+docker-buildx-plugin     | download.docker.com apt repo      | installers/05-docker.sh
+docker-compose-plugin    | download.docker.com apt repo      | installers/05-docker.sh
+gum                      | repo.charm.sh apt repo            | init.sh
+grafana                  | apt.grafana.com apt repo          | installers/09-monitoring.sh
+loki                     | github.com/grafana/loki releases  | installers/09-monitoring.sh
+tailscale                | pkgs.tailscale.com apt repo       | (optional)
+neovim                   | github.com/neovim/neovim releases | installers/11-nvim.sh
+oh-my-zsh                | github.com/ohmyzsh/ohmyzsh        | installers/02-zsh.sh
+nvm + node               | github.com/nvm-sh/nvm             | installers/03-nodejs.sh
+pm2                      | npm -g                            | installers/10-pm2.sh
+sdkman + java            | get.sdkman.io                     | installers/04-java.sh
